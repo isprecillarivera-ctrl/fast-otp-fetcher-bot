@@ -22,12 +22,12 @@ except ValueError:
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 📱 মেইন মেনু কিবোর্ড
+# 🚀 নিচের মূল অপশন দুটিকে আরও বড় ও আকর্ষণীয় গ্লোয়িং ইমোজি দিয়ে সাজানো হলো
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("📱 GET NUMBER"), KeyboardButton("🔑 2FA CODE")]
+    [KeyboardButton("🔥 [ GET NUMBER ] 🔥"), KeyboardButton("🔑 [ 2FA CODE ] 🔑")]
 ], resize_keyboard=True, is_persistent=True)
 
-# 🌍 নম্বর থেকে সঠিক দেশ ও পতাকা খোঁজার লোকাল ম্যাপার
+# 🌍 দেশ ও পতাকা ম্যাপার
 def get_flag_and_name(number_str):
     if not number_str:
         return "International", "🌍"
@@ -50,7 +50,7 @@ def get_flag_and_name(number_str):
             return info
     return (f"Country (+{clean_num[:3]})", "🌍")
 
-# 📡 আপনার ওয়েবসাইটের সার্ভার থেকে লাইভ নম্বর ও ওটিপি আনার আসল মেথড
+# 📡 সেন্ট্রাল এপিআই রিকোয়েস্টার
 def call_website_api(payload):
     try:
         url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
@@ -80,40 +80,23 @@ async def start(update: Update, context: CallbackContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 🛍️ ধাপ ১: সার্ভিস সিলেকশন মেনু (ফেসবুক ও ইনস্টাগ্রামের আলাদা ইনলাইন বাটন)
+# 🛍️ ধাপ ১: সার্ভিস সিলেকশন মেনু (কালারফুল এবং আকর্ষণীয় বাটন টেক্সট)
 async def show_services_menu(message_obj):
     buttons = [
-        [InlineKeyboardButton("🔷 Facebook (ফেসবুক) 🔷", callback_data="service_facebook")],
-        [InlineKeyboardButton("🔷 Instagram (ইনস্টাগ্রাম) 🔷", callback_data="service_instagram")]
+        [InlineKeyboardButton("🔵 🔵 FACEBOOK (ফেসবুক) 🔵 🔵", callback_data="service_facebook")],
+        [InlineKeyboardButton("📸 📸 INSTAGRAM (ইনস্টাগ্রাম) 📸 📸", callback_data="service_instagram")]
     ]
-    
-    # অসাধারণ ব্যাকগ্রাউন্ড লুক দেওয়ার জন্য একটি প্রিমিয়াম নীল রঙের ব্যানার ইমেজ ব্যবহার (ছবির সাথে বাটন)
-    blue_panel_url = "https://i.ibb.co/ycX4mZH/blue-banner.png" # এটি একটি গাঢ় নীল ব্যাকগ্রাউন্ড ইমেজের লিংক
-    
-    try:
-        await message_obj.reply_photo(
-            photo=blue_panel_url,
-            caption=f"🔷 **SELECT YOUR TARGET SERVICE** 🔷\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"👇 *কোন সার্ভিসের নাম্বার প্রয়োজন সেটি সিলেক্ট করুন:*",
-            reply_markup=InlineKeyboardMarkup(buttons),
-            parse_mode=ParseMode.MARKDOWN
-        )
-    except Exception:
-        # ইমেজ লোড না হলে সাধারণ নীল থিম টেক্সটে ব্যাকআপ দেবে
-        await message_obj.reply_text(
-            f"🔷 **SELECT YOUR TARGET SERVICE** 🔷\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👇 *কোন সার্ভিসের নাম্বার প্রয়োজন সেটি সিলেক্ট করুন:*",
-            reply_markup=InlineKeyboardMarkup(buttons),
-            parse_mode=ParseMode.MARKDOWN
-        )
+    await message_obj.reply_text(
+        f"⚡ **SELECT YOUR PREMIUM SERVICE** ⚡\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👇 *কোন সার্ভিসের নাম্বার প্রয়োজন সেটি সিলেক্ট করুন:*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-# 🔄  ধাপ ২: নির্দিষ্ট সার্ভিসের লাইভ রেঞ্জ মেনু প্রদর্শন
+# 🔄 ধাপ ২: রেঞ্জ মেনু প্রদর্শন
 async def show_ranges_menu(message_obj, service_name):
-    # আপনার ওয়েবসাইট থেকে সরাসরি সচল রেঞ্জের লিস্ট চাওয়া হচ্ছে
     api_response = call_website_api({"action": "getnum", "service": service_name, "type": "ranges"})
-    
     buttons = []
     
     if api_response and api_response.get("meta", {}).get("status") == "ok":
@@ -122,7 +105,6 @@ async def show_ranges_menu(message_obj, service_name):
             c_name, c_flag = get_flag_and_name(r)
             buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{service_name}_{r}")])
             
-    # যদি ওয়েবসাইট সার্ভার খালি রেসপন্স দেয়, তবে আপনার ৩টি মূল সচল রেঞ্জ লোড হবে
     if not buttons:
         fallback_ranges = ["26134", "224655", "23274"]
         for r in fallback_ranges:
@@ -131,28 +113,17 @@ async def show_ranges_menu(message_obj, service_name):
             
     buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
     
-    # ফেসবুক বা ইনস্টাগ্রাম অনুযায়ী নির্দিষ্ট লোগো ইমেজ সেট করা
-    logo_url = "https://i.ibb.co/pnB1D3j/facebook.png" if service_name == "facebook" else "https://i.ibb.co/k2xqyK4/instagram.png"
+    service_title = "🔵 FACEBOOK" if service_name == "facebook" else "📸 INSTAGRAM"
     
-    try:
-        await message_obj.reply_photo(
-            photo=logo_url,
-            caption=f"🔷 **LIVE ACTIVE RANGES FOR {service_name.upper()}** 🔷\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"👇 *সার্ভার থেকে প্রাপ্ত সচল রেঞ্জ সিলেক্ট করুন:*",
-            reply_markup=InlineKeyboardMarkup(buttons),
-            parse_mode=ParseMode.MARKDOWN
-        )
-    except Exception:
-        await message_obj.reply_text(
-            f"🔷 **LIVE ACTIVE RANGES FOR {service_name.upper()}** 🔷\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👇 *সার্ভার থেকে প্রাপ্ত সচল রেঞ্জ সিলেক্ট করুন:*",
-            reply_markup=InlineKeyboardMarkup(buttons),
-            parse_mode=ParseMode.MARKDOWN
-        )
+    await message_obj.reply_text(
+        f"🔷 **LIVE ACTIVE RANGES FOR {service_title}** 🔷\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👇 *সার্ভার থেকে প্রাপ্ত সচল রেঞ্জ সিলেক্ট করুন:*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-# 📩 ওটিপি রিসিভ করার রিয়েল-টাইম ব্যাকগ্রাউন্ড লুপ
+# 📩 ওটিপি রিসিভ করার লুপ
 async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_msg_id, number_str, c_flag, c_name):
     for _ in range(30): 
         await asyncio.sleep(10)
@@ -162,19 +133,19 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
                 success_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🔷 📋 {otp_code} (Tap to Copy OTP) 🔷", callback_data=f"copy_{otp_code}")]
+                    [InlineKeyboardButton(f"🟢 📋 {otp_code} (Tap to Copy) 🟢", callback_data=f"copy_{otp_code}")]
                 ])
                 try:
-                    await context.bot.edit_message_caption(
+                    await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=original_msg_id,
-                        caption=f"✅ **OTP CODE RECEIVED SUCCESSFULLY!** ✅\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                                f"🌍 `Region:` **{c_flag} {c_name}**\n"
-                                f"📱 `Number:` `+{number_str}`\n"
-                                f"🔑 **YOUR OTP CODE:** `{otp_code}`\n"
-                                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                                f"👇 *ওটিপি কোডটি কপি করতে নিচের নীল বাটনে চাপ দিন:*",
+                        text=f"✅ **OTP CODE RECEIVED SUCCESSFULLY!** ✅\n"
+                             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                             f"🌍 `Region:` **{c_flag} {c_name}**\n"
+                             f"📱 `Number:` `+{number_str}`\n"
+                             f"🔑 **YOUR OTP CODE:** `{otp_code}`\n"
+                             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                             f"👇 *ওটিপি কোডটি কপি করতে নিচের বাটনে চাপ দিন:*",
                         reply_markup=success_buttons,
                         parse_mode=ParseMode.MARKDOWN
                     )
@@ -182,10 +153,10 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
                     pass
                 return
     try:
-        await context.bot.edit_message_caption(
+        await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=original_msg_id,
-            caption=f"❌ **OTP Timeout!** কোনো ওটিপি কোড পাওয়া যায়নি। অনুগ্রহ করে নতুন নম্বর নিন।"
+            text=f"❌ **OTP Timeout!** কোনো ওটিপি কোড পাওয়া যায়নি।"
         )
     except Exception:
         pass
@@ -212,8 +183,6 @@ async def handle_callback(update: Update, context: CallbackContext):
         selected_range = parts[2]
         
         status_msg = await query.message.reply_text("⏳ **Connecting to Server... Fetching Real Number...**")
-        
-        # আপনার ওয়েবসাইট থেকে রিয়েল নম্বর রিকোয়েস্ট করা হচ্ছে
         api_response = call_website_api({"action": "getnum", "service": service_name, "range": selected_range})
         await status_msg.delete()
         
@@ -226,24 +195,20 @@ async def handle_callback(update: Update, context: CallbackContext):
                 c_name, c_flag = get_flag_and_name(original_number)
                 
                 number_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🔷 📋 +{original_number} (Tap to Copy) 🔷", callback_data=f"copy_{original_number}")],
+                    [InlineKeyboardButton(f"🟢 📋 +{original_number} (Copy) 🟢", callback_data=f"copy_{original_number}")],
                     [InlineKeyboardButton("🔹 Change Number 🔹", callback_data=f"service_{service_name}")]
                 ])
                 
                 await query.message.delete()
                 
-                # নম্বর আউটপুট প্যানেলেও গাঢ় নীল থিম ব্যানার ব্যবহার করা হয়েছে
-                blue_panel_url = "https://i.ibb.co/ycX4mZH/blue-banner.png"
-                
-                sent_msg = await query.message.reply_photo(
-                    photo=blue_panel_url,
-                    caption=f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"🌍 `Region:` **{c_flag} {c_name}**\n"
-                            f"🆔 `Session ID:` `{number_id}`\n"
-                            f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"👇 *নাম্বার কপি করতে নিচের নীল বাটনে চাপ দিন:*",
+                sent_msg = await query.message.reply_text(
+                    f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🌍 `Region:` **{c_flag} {c_name}**\n"
+                    f"🆔 `Session ID:` `{number_id}`\n"
+                    f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"👇 *নাম্বার কপি করতে নিচের বাটনে চাপ দিন:*",
                     reply_markup=number_buttons,
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -251,7 +216,7 @@ async def handle_callback(update: Update, context: CallbackContext):
                 asyncio.create_task(check_otp_loop(context, query.message.chat_id, number_id, sent_msg.message_id, original_number, c_flag, c_name))
                 return
                 
-        await query.message.reply_text(f"❌ **API Error:** আপনার ওয়েবসাইট বর্তমানে {service_name.upper()} সার্ভিসের জন্য কোনো আসল নম্বর দিতে পারছে না।")
+        await query.message.reply_text(f"❌ **API Error:** আপনার ওয়েবসাইট বর্তমানে এই নম্বরটি দিতে পারছে না।")
         
     elif data.startswith("copy_"):
         num = data.split("_")[1]
@@ -262,10 +227,10 @@ async def handle_message(update: Update, context: CallbackContext):
         return
     text = update.message.text
 
-    if text == "📱 GET NUMBER":
+    if text == "🔥 [ GET NUMBER ] 🔥":
         await show_services_menu(update.message)
         
-    elif text == "🔑 2FA CODE":
+    elif text == "🔑 [ 2FA CODE ] 🔑":
         await update.message.reply_text(
             "🔑 **SECURE 2FA CODE DECRYPTER**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
