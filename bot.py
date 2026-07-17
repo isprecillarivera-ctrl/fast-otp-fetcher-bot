@@ -134,7 +134,6 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
-                # ওটিপি পাওয়ার পর শুধুমাত্র 'Change Number' বাটন থাকবে
                 success_buttons = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Change Number 🔄", callback_data=f"service_{service_name}")]
                 ])
@@ -208,14 +207,12 @@ async def handle_callback(update: Update, context: CallbackContext):
             if original_number:
                 c_name, c_flag = get_flag_and_name(original_number)
                 
-                # ফালতু কপি বাটন ডিলিট করে শুধু কাজের চেঞ্জ বাটন রাখা হলো
                 number_buttons = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Change Number 🔄", callback_data=f"service_{service_name}")]
                 ])
                 
                 await query.message.delete()
                 
-                # নাম্বার ডিসপ্লে ডিজাইন আল্ট্রা-বোল্ড ও পরিষ্কার করা হলো
                 sent_msg = await query.message.reply_text(
                     f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -264,5 +261,5 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
- if __name__ == '__main__':
+if __name__ == '__main__':
     main()
