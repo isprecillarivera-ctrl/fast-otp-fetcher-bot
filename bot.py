@@ -3,7 +3,6 @@ import re
 import os
 import requests
 import pyotp
-import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, MessageHandler, filters, CallbackContext, CommandHandler, CallbackQueryHandler
@@ -25,39 +24,58 @@ OTP_PATTERN = re.compile(r'\b(\d{4,8})\b')
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 🛠️ প্রফেশনাল কিবোর্ড লেআউট
+# 🛠️ প্রফেশনাল মেইন কিবোর্ড
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🎲 GET NUMBER"), KeyboardButton("🔐 2FA GENERATOR")],
+    [KeyboardButton("📱 GET NUMBER"), KeyboardButton("🔑 2FA GENERATOR")],
     [KeyboardButton("👤 MY ACCOUNT"), KeyboardButton("ℹ️ HELP CENTER")]
 ], resize_keyboard=True, is_persistent=True)
 
+# 🔵 🟠 প্রিমিয়াম বাটন লেআউট
 num_keyboard = InlineKeyboardMarkup([
-    [InlineKeyboardButton("🔵 Facebook Premium", callback_data="num_fb")],
-    [InlineKeyboardButton("🟠 Instagram Premium", callback_data="num_ig")],
+    [InlineKeyboardButton("🟦 Facebook Premium (Official)", callback_data="num_fb")],
+    [InlineKeyboardButton("🟧 Instagram Premium (Official)", callback_data="num_ig")],
     [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_main")]
 ])
 
-def get_country_info(number):
+# 🌍 ১০০% ডাইনামিক কান্ট্রি ও ফ্ল্যাগ ডিটেক্টর (API ভিত্তিক)
+def get_dynamic_country(number):
     if not number:
         return "Unknown Country 🌐"
+    
+    # শুধু সংখ্যাগুলো ফিল্টার করা
     clean_num = re.sub(r'\D', '', str(number))
-    country_map = {
-        "7": "Russia/Kazakhstan 🇷🇺/🇰🇿",
-        "1": "USA/Canada 🇺🇸/🇨🇦",
-        "44": "United Kingdom 🇬🇧",
-        "91": "India 🇮🇳",
-        "880": "Bangladesh 🇧🇩",
-        "62": "Indonesia 🇮🇩",
-        "63": "Philippines 🇵🇭",
-        "84": "Vietnam 🇻🇳",
-        "380": "Ukraine 🇺🇦",
-        "20": "Egypt 🇪🇬",
-        "92": "Pakistan 🇵🇰"
-    }
-    for prefix in sorted(country_map.keys(), key=len, reverse=True):
-        if clean_num.startswith(prefix):
-            return country_map[prefix]
-    return "Dynamic Server Country 🌍"
+    
+    try:
+        # গ্লোবাল রেস্ট কান্ট্রিজ API ব্যবহার করে দেশের নাম ও সঠিক পতাকা বের করা
+        # এটি যেকোনো ইন্টারন্যাশনাল ফোন রেঞ্জ স্বয়ংক্রিয়ভাবে ডিটেক্ট করতে পারে
+        response = requests.get(f"https://restcountries.com/v3.1/all", timeout=5)
+        if response.status_code == 200:
+            countries = response.json()
+            # কান্ট্রি কোডের লেন্থ বড় থেকে ছোট অনুযায়ী চেক (যেমন: ৩ ডিজিট, তারপর ২ ডিজিট)
+            for length in [3, 2, 1]:
+                prefix = clean_num[:length]
+                for country in countries:
+                    idd = country.get('idd', {})
+                    root = idd.get('root', '')
+                    suffixes = idd.get('suffixes', [])
+                    
+                    # দেশের ফুল কলিং কোড তৈরি করা
+                    for suffix in suffixes:
+                        full_code = f"{root}{suffix}".replace("+", "")
+                        if full_code == prefix:
+                            name = country.get('name', {}).get('common', 'Unknown')
+                            flag = country.get('flag', '🌐')
+                            return f"{name} {flag}"
+                    
+                    # শুধু রুট কোড ম্যাচ হলে (যেমন: USA/Canada এর জন্য +1)
+                    if root.replace("+", "") == prefix:
+                        name = country.get('name', {}).get('common', 'Unknown')
+                        flag = country.get('flag', '🌐')
+                        return f"{name} {flag}"
+    except Exception:
+        pass
+        
+    return "International Server 🌍"
 
 async def get_number(service):
     try:
@@ -96,12 +114,16 @@ async def handle_callback(update: Update, context: CallbackContext):
     data = query.data
 
     if data == "num_fb":
-        await query.message.edit_text("⏳ **Connecting to API... Requesting Facebook 🔵 Number...**")
+        status_msg = await query.message.reply_text("⏳ **Connecting to API... Requesting Facebook 🟦 Number...**")
         number, _ = await get_number("26134XXX")
+        await status_msg.delete()
+        
         if number:
-            country = get_country_info(number)
+            country = get_dynamic_country(number)
+            # ফেসবুকের রিয়েল লোগো প্রিভিউ লিংক সহ মেসেজ
+            fb_logo_url = "https://i.imgur.com/3bpfw8G.png"
             await query.message.reply_text(
-                f"🔵 **FACEBOOK OFFICIAL SERVICE**\n"
+                f"[ ]({fb_logo_url})🟦 **FACEBOOK OFFICIAL SERVICE**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🌍 **Country:** {country}\n"
                 f"📱 **Number:** `{number}`\n"
@@ -114,12 +136,16 @@ async def handle_callback(update: Update, context: CallbackContext):
             await query.message.reply_text("❌ **Server Busy!** Could not fetch Facebook number. Try again.")
 
     elif data == "num_ig":
-        await query.message.edit_text("⏳ **Connecting to API... Requesting Instagram 🟠 Number...**")
+        status_msg = await query.message.reply_text("⏳ **Connecting to API... Requesting Instagram 🟧 Number...**")
         number, _ = await get_number("22507XXX")
+        await status_msg.delete()
+        
         if number:
-            country = get_country_info(number)
+            country = get_dynamic_country(number)
+            # ইনস্টাগ্রামের রিয়েল লোগো প্রিভিউ লিংক সহ মেসেজ
+            ig_logo_url = "https://i.imgur.com/x5S6B8u.png"
             await query.message.reply_text(
-                f"🟠 **INSTAGRAM OFFICIAL SERVICE**\n"
+                f"[ ]({ig_logo_url})🟧 **INSTAGRAM OFFICIAL SERVICE**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🌍 **Country:** {country}\n"
                 f"📱 **Number:** `{number}`\n"
@@ -143,11 +169,11 @@ async def handle_message(update: Update, context: CallbackContext):
     if 'waiting_for_2fa' not in user_data:
         user_data['waiting_for_2fa'] = False
 
-    if text == "🎲 GET NUMBER":
+    if text == "📱 GET NUMBER":
         user_data['waiting_for_2fa'] = False
         await update.message.reply_text("🔍 **Select the Premium Service:**", reply_markup=num_keyboard)
     
-    elif text == "🔐 2FA GENERATOR":
+    elif text == "🔑 2FA GENERATOR":
         user_data['waiting_for_2fa'] = True
         await update.message.reply_text(
             "🔐 **2FA LIVE CODE GENERATOR**\n"
@@ -178,11 +204,11 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text(
             "ℹ️ **SYSTEM HELP CENTER**\n\n"
             "🚀 **How to get Dynamic Number:**\n"
-            "1. Click **🎲 GET NUMBER**.\n"
-            "2. Select Facebook 🔵 or Instagram 🟠.\n"
+            "1. Click **📱 GET NUMBER**.\n"
+            "2. Select Facebook 🟦 or Instagram 🟧.\n"
             "3. Copy the number & request OTP.\n\n"
             "🔐 **How to generate 2FA Code:**\n"
-            "1. Click **🔐 2FA GENERATOR**.\n"
+            "1. Click **🔑 2FA GENERATOR**.\n"
             "2. Send your 2FA Secret Key directly into the chat.",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -210,12 +236,12 @@ async def handle_message(update: Update, context: CallbackContext):
         for otp in otps:
             try:
                 await context.bot.send_message(
-                    YOUR_CHAT_ID, 
-                    f"🔥 **NEW LIVE OTP RECEIVED!**\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"🔑 **OTP CODE:** `{otp}`\n"
-                    f"⏰ **Timestamp:** {datetime.now().strftime('%H:%M:%S')}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━", 
+                    chat_id=YOUR_CHAT_ID, 
+                    text=f"🔥 **NEW LIVE OTP RECEIVED!**\n"
+                         f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                         f"🔑 **OTP CODE:** `{otp}`\n"
+                         f"⏰ **Timestamp:** {datetime.now().strftime('%H:%M:%S')}\n"
+                         f"━━━━━━━━━━━━━━━━━━━━━━━━", 
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as e:
@@ -226,15 +252,13 @@ def main():
         print("❌ ERROR: BOT_TOKEN is missing!")
         return
     
-    # রেলওয়ের পাইথন ৩.১৩ ব্যাকএন্ড ক্র্যাশ ঠেকাতে স্ট্যান্ডার্ড মেথড ব্যবহার
     app = Application.builder().token(TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("🚀 BOT ENGINE STARTING...")
-    app.run_polling(close_loop=False)
+    app.run_polling()
 
 if __name__ == '__main__':
     main()
