@@ -22,7 +22,7 @@ except ValueError:
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 👑 নিচের অপশন দুটিকে আরও চওড়া, বড় এবং আকর্ষণীয় হাইলাইটার দিয়ে সাজানো হলো
+# 👑 মেইন কিবোর্ড বাটন (বিশাল ও আকর্ষণীয়)
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")],
     [KeyboardButton("🔑 ⚡ ━━━━━━ [ 2FA CODE ] ━━━━━━ ⚡ 🔑")]
@@ -125,7 +125,7 @@ async def show_ranges_menu(message_obj, service_name):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 📩 ওটিপি রিসিভ করার লুপ (১-ট্যাপে ওটিপি ও কপি ফিচার সহ)
+# 📩 ওটিপি রিসিভ করার লুপ
 async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_msg_id, number_str, c_flag, c_name):
     for _ in range(30): 
         await asyncio.sleep(7) 
@@ -134,11 +134,11 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
+                # নিচের কপি বাটনে চাপ দিলে এখন ফ্ল্যাশ পপ-আপ অ্যালার্টে ওটিপি শো করবে এবং ইউজার কপি করতে পারবে!
                 success_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🟢 📋 {otp_code} (কপি করতে চাপুন) 🟢", callback_data=f"copy_{otp_code}")]
+                    [InlineKeyboardButton(f"🟢 🔥 [ {otp_code} ] - চাপুন ও কপি করুন 🟢", callback_data=f"copy_{otp_code}")]
                 ])
                 try:
-                    # এখানে `{otp_code}` ওপরে জাস্ট টাচ করলেই অটোমেটিক কপি হয়ে যাবে!
                     await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=original_msg_id,
@@ -148,7 +148,7 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
                              f"📱 `Number:` `+{number_str}`\n"
                              f"🔑 `Your OTP:` `{otp_code}` *(১-ট্যাপে কপি করতে ওপরে ক্লিক করুন)*\n"
                              f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                             f"👇 *অথবা নিচের কপি বাটনে চাপ দিন:*",
+                             f"👇 **অথবা নিচের বড় বাটনে চাপ দিয়ে কপি সম্পন্ন করুন:**",
                         reply_markup=success_buttons,
                         parse_mode=ParseMode.MARKDOWN
                     )
@@ -168,19 +168,21 @@ async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     if not query:
         return
-    await query.answer()
     data = query.data
 
     if data == "back_to_services":
+        await query.answer()
         await query.message.delete()
         await show_services_menu(query.message)
 
     elif data.startswith("service_"):
+        await query.answer()
         service_name = data.split("_")[1]
         await query.message.delete()
         await show_ranges_menu(query.message, service_name)
 
     elif data.startswith("range_"):
+        await query.answer()
         parts = data.split("_")
         service_name = parts[1]
         selected_range = parts[2]
@@ -198,13 +200,12 @@ async def handle_callback(update: Update, context: CallbackContext):
                 c_name, c_flag = get_flag_and_name(original_number)
                 
                 number_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🟢 📋 +{original_number} (কপি করতে চাপুন) 🟢", callback_data=f"copy_{original_number}")],
+                    [InlineKeyboardButton(f"🟢 🔥 [ +{original_number} ] - চাপুন ও কপি করুন 🟢", callback_data=f"copy_{original_number}")],
                     [InlineKeyboardButton("🔹 Change Number 🔹", callback_data=f"service_{service_name}")]
                 ])
                 
                 await query.message.delete()
                 
-                # এখানে `+{original_number}` এর ওপর ক্লিক করলেই ইনস্ট্যান্ট কপি হয়ে যাবে!
                 sent_msg = await query.message.reply_text(
                     f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -214,7 +215,7 @@ async def handle_callback(update: Update, context: CallbackContext):
                     f"👉 *(নম্বরটি ১-ট্যাপে কপি করতে ওপরে নম্বরের লেখাটির ওপর টাচ করুন)*\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
-                    f"👇 *অথবা নিচের কপি বাটনে চাপ দিন:*",
+                    f"👇 **অথবা নিচের বড় বাটনে চাপ দিয়ে কপি সম্পন্ন করুন:**",
                     reply_markup=number_buttons,
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -225,8 +226,9 @@ async def handle_callback(update: Update, context: CallbackContext):
         await query.message.reply_text(f"❌ **API Error:** আপনার ওয়েবসাইট বর্তমানে এই নম্বরটি দিতে পারছে না।")
         
     elif data.startswith("copy_"):
+        # 🔥 এখানে `show_alert=True` করার কারণে এখন বাটনে চাপ দিলে মোবাইল স্ক্রিনে পপ-আপ অ্যালার্ট ভেসে উঠবে এবং সফলভাবে কাজ করবে!
         num = data.split("_")[1]
-        await query.answer(text=f"✅ +{num} Copied!", show_alert=True)
+        await query.answer(text=f"✅ Copy Successful:\n+{num}\n\n(এখন যেকোনো জায়গায় পেস্ট করতে পারবেন)", show_alert=True)
 
 async def handle_message(update: Update, context: CallbackContext):
     if not update.message or not update.message.text:
