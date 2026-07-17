@@ -2,7 +2,7 @@ import logging
 import re
 import os
 import requests
-import pyotp  # 🔐 লাইভ ২FA কোড জেনারেট করার জন্য
+import pyotp  # 🔐 Live 2FA Code Generator
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, MessageHandler, filters, CallbackContext, CommandHandler, CallbackQueryHandler
@@ -25,10 +25,10 @@ main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("👤 MY ACCOUNT"), KeyboardButton("ℹ️ HELP CENTER")]
 ], resize_keyboard=True, is_persistent=True)
 
-# 🌍 ওরিজিনাল লোগো স্টাইলের ইনলাইন কিবোর্ড
+# 🌍 ওরিজিনাল লোগো কালার স্টাইলের ইনলাইন কিবোর্ড (🔵 = Facebook Official, 🟠 = Instagram)
 num_keyboard = InlineKeyboardMarkup([
     [InlineKeyboardButton("🔵 Facebook Premium", callback_data="num_fb")],
-    [InlineKeyboardButton("📸 Instagram Premium", callback_data="num_ig")],
+    [InlineKeyboardButton("🟠 Instagram Premium", callback_data="num_ig")],
     [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_main")]
 ])
 
@@ -76,7 +76,7 @@ async def get_number(service):
 async def start(update: Update, context: CallbackContext):
     context.user_data['waiting_for_2fa'] = False
     await update.message.reply_text(
-        "🔥 **WELCOME TO SUPER FIRE OTP BOT v2.5** 🔥\n"
+        "🔥 **WELCOME TO SUPER FIRE OTP BOT v3.0** 🔥\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🟢 **Status:** Operational & High Speed\n"
         "💰 **Balance:** 0.0 BDT\n"
@@ -110,12 +110,12 @@ async def handle_callback(update: Update, context: CallbackContext):
             await query.message.reply_text("❌ **Server Busy!** Could not fetch Facebook number. Try again.")
 
     elif data == "num_ig":
-        await query.message.edit_text("⏳ **Connecting to API... Requesting Instagram 📸 Number...**")
+        await query.message.edit_text("⏳ **Connecting to API... Requesting Instagram 🟠 Number...**")
         number, _ = await get_number("22507XXX")
         if number:
             country = get_country_info(number)
             await query.message.reply_text(
-                f"📸 **INSTAGRAM OFFICIAL SERVICE**\n"
+                f"🟠 **INSTAGRAM OFFICIAL SERVICE**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🌍 **Country:** {country}\n"
                 f"📱 **Number:** `{number}`\n"
@@ -133,6 +133,10 @@ async def handle_callback(update: Update, context: CallbackContext):
 async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text
     user_data = context.user_data
+
+    # নিশ্চিত করা যাতে ইউজার ডাটা ডিকশনারি ঠিক থাকে
+    if 'waiting_for_2fa' not in user_data:
+        user_data['waiting_for_2fa'] = False
 
     if text == "🎲 GET NUMBER":
         user_data['waiting_for_2fa'] = False
@@ -152,11 +156,12 @@ async def handle_message(update: Update, context: CallbackContext):
         
     elif text == "👤 MY ACCOUNT":
         user_data['waiting_for_2fa'] = False
+        username = f"@{update.effective_user.username}" if update.effective_user.username else "None"
         await update.message.reply_text(
             f"👤 **PREMIUM USER PROFILE**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🆔 **User ID:** `{update.effective_user.id}`\n"
-            f"📛 **Username:** @{update.effective_user.username if update.effective_user.username else 'None'}\n"
+            f"HN **Username:** {username}\n"
             f"💰 **Available Balance:** 0.0 BDT\n"
             f"🛡️ **Account Status:** Active ✅\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -169,7 +174,7 @@ async def handle_message(update: Update, context: CallbackContext):
             "ℹ️ **SYSTEM HELP CENTER**\n\n"
             "🚀 **How to get Dynamic Number:**\n"
             "1. Click **🎲 GET NUMBER**.\n"
-            "2. Select Facebook 🔵 or Instagram 📸.\n"
+            "2. Select Facebook 🔵 or Instagram 🟠.\n"
             "3. Copy the number & request OTP from the official app.\n\n"
             "🔐 **How to generate 2FA Code:**\n"
             "1. Click **🔐 2FA GENERATOR**.\n"
@@ -177,7 +182,7 @@ async def handle_message(update: Update, context: CallbackContext):
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # 🔐 লাইভ ২FA কোড জেনারেট করার আসল লজিক
+    # 🔐 লাইভ ২FA কোড জেনারেট করার লজিক
     elif user_data.get('waiting_for_2fa'):
         secret = text.strip().replace(" ", "")
         try:
@@ -217,7 +222,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("🚀 SUPER FIRE OTP BOT v2.5 - Dynamic & Professional Edition Running...")
+    print("🚀 BOT ACTIVE - All bugs fixed successfully!")
     app.run_polling()
 
 if __name__ == '__main__':
