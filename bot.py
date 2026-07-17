@@ -24,13 +24,18 @@ OTP_PATTERN = re.compile(r'\b(\d{4,8})\b')
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 💎 সুপার-ক্লিন ও প্রফেশনাল কিবোর্ড (ব্যালেন্স ছাড়া শুধু কাজের অপশন)
+# 📱 ফিক্সড প্রফেশনাল কিবোর্ড (লুডুর ইমোজি সরিয়ে মোবাইল ও কি-এর সঠিক আইকন দেওয়া হয়েছে)
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🎲 GET NUMBER"), KeyboardButton("🔐 2FA CODE")]
+    [KeyboardButton("📱 GET NUMBER"), KeyboardButton("🔑 2FA CODE")]
 ], resize_keyboard=True, is_persistent=True)
 
-# 🌍 গ্লোবাল লাইভ রেঞ্জ টু কান্ট্রি ম্যাপার
-def get_flag_and_name(code_str):
+# 🌍 ফোন নম্বরের শুরু দেখে সঠিক দেশ ও পতাকা খোঁজার লোকাল ডাইনামিক ইঞ্জিন
+def get_flag_and_name(number_str):
+    if not number_str:
+        return "International", "🌍"
+    
+    clean_num = re.sub(r'\D', '', str(number_str))
+    
     country_map = {
         "261": ("Madagascar", "🇲🇬"),
         "224": ("Guinea", "🇬🇳"),
@@ -46,17 +51,29 @@ def get_flag_and_name(code_str):
         "92":  ("Pakistan", "🇵🇰"),
         "20":  ("Egypt", "🇪🇬")
     }
+    
     for prefix, info in country_map.items():
-        if code_str.startswith(prefix):
+        if clean_num.startswith(prefix):
             return info
     return ("International Server", "🌍")
+
+# 📡 এপিআই থেকে লাইভ রেঞ্জ বা আসল নম্বর তুলে আনার সেন্ট্রাল ইঞ্জিন
+def call_sms_api(payload):
+    try:
+        url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
+        headers = {"X-API-Key": API_KEY}
+        r = requests.post(url, json=payload, headers=headers, timeout=20)
+        data = r.json()
+        if data.get("meta", {}).get("status") == "ok":
+            return data.get("data", {})
+    except Exception as e:
+        logging.error(f"API Connection Error: {e}")
+    return None
 
 async def start(update: Update, context: CallbackContext):
     if not update.message:
         return
     name = update.effective_user.first_name
-    
-    # আল্ট্রা-লাক্সারি নিওন স্টাইলড ওয়েলকাম স্ক্রিন (টাকা-পয়সার কোনো লেখা নেই)
     await update.message.reply_text(
         f"✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n"
         f"📥 `User:` **{name}**\n"
@@ -67,24 +84,28 @@ async def start(update: Update, context: CallbackContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 🔄 ডাইনামিক লাইভ রেঞ্জ মেনু
-async def show_ranges_menu(message_obj, service_name="Facebook"):
-    live_ranges = ["26134", "224655", "23274"] 
-    
+# 🔄 এপিআই ডেটা অনুযায়ী ডাইনামিক রেঞ্জ মেনু তৈরি
+async def show_ranges_menu(message_obj):
+    api_response = call_sms_api({"action": "get_ranges", "service": "facebook"})
     buttons = []
-    for r in live_ranges:
-        c_name, c_flag = get_flag_and_name(r)
-        buttons.append([InlineKeyboardButton(f"📡 {c_flag} {c_name} ({r})", callback_data=f"select_{service_name.lower()}_{r}")])
     
-    buttons.append([InlineKeyboardButton("🔄 ⚡ REFRESH RANGES ⚡ 🔄", callback_data=f"refresh_{service_name.lower()}")])
+    if api_response and "ranges" in api_response:
+        for r in api_response["ranges"]:
+            c_name, c_flag = get_flag_and_name(r)
+            buttons.append([InlineKeyboardButton(f"📡 {c_flag} {c_name} ({r})", callback_data=f"range_{r}")])
+    else:
+        fallback_ranges = ["26134", "224655", "23274"]
+        for r in fallback_ranges:
+            c_name, c_flag = get_flag_and_name(r)
+            buttons.append([InlineKeyboardButton(f"📡 {c_flag} {c_name} ({r})", callback_data=f"range_{r}")])
     
-    reply_markup = InlineKeyboardMarkup(buttons)
+    buttons.append([InlineKeyboardButton("🔄 ⚡ REFRESH RANGES ⚡ 🔄", callback_data="refresh_ranges")])
     
     await message_obj.reply_text(
-        f"🔥 **LIVE ACTIVE RANGES FOR {service_name.upper()}**\n"
+        f"🔥 **LIVE ACTIVE RANGES FOR FACEBOOK**\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"👇 *সিলেক্ট করুন কোন দেশের নাম্বার প্রয়োজন:*",
-        reply_markup=reply_markup,
+        reply_markup=InlineKeyboardMarkup(buttons),
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -95,36 +116,43 @@ async def handle_callback(update: Update, context: CallbackContext):
     await query.answer()
     data = query.data
 
-    if data == "refresh_facebook":
+    if data == "refresh_ranges":
         await query.message.delete()
-        await show_ranges_menu(query.message, "Facebook")
+        await show_ranges_menu(query.message)
 
-    elif data.startswith("select_"):
-        parts = data.split("_")
-        service = parts[1]
-        selected_range = parts[2]
+    elif data.startswith("range_"):
+        selected_range = data.split("_")[1]
+        status_msg = await query.message.reply_text("⏳ **Connecting to Server... Fetching Original Number...**")
         
-        c_name, c_flag = get_flag_and_name(selected_range)
-        generated_number = f"{selected_range}{datetime.now().strftime('%M%S%f')[:6]}"
+        api_response = call_sms_api({"range": selected_range, "action": "get_number"})
+        await status_msg.delete()
         
-        # 💎 লাক্সারি ট্যাপ-টু-কপি ইনলাইন লেআউট
-        number_buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"📋 🔗 +{generated_number} (Tap to Copy)", callback_data=f"copy_{generated_number}")],
-            [InlineKeyboardButton("🔄 Change Number", callback_data=f"select_{service}_{selected_range}")],
-            [InlineKeyboardButton("🌐 Change Country Range", callback_data="refresh_facebook")]
-        ])
-        
-        await query.message.delete()
-        await query.message.reply_text(
-            f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🌍 `Region:` **{c_flag} {c_name}**\n"
-            f"⏱️ `Status:` **Waiting for Dynamic OTP...**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👇 *নাম্বার কপি করতে নিচের বাটনে চাপ দিন:*",
-            reply_markup=number_buttons,
-            parse_mode=ParseMode.MARKDOWN
-        )
+        if api_response and "full_number" in api_response:
+            original_number = api_response.get("full_number")
+            number_id = api_response.get("id")
+            
+            c_name, c_flag = get_flag_and_name(original_number)
+            
+            number_buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"📋 🔗 +{original_number} (Tap to Copy)", callback_data=f"copy_{original_number}")],
+                [InlineKeyboardButton("🔄 Change Number", callback_data=f"range_{selected_range}")],
+                [InlineKeyboardButton("🌐 Change Country Range", callback_data="refresh_ranges")]
+            ])
+            
+            await query.message.delete()
+            await query.message.reply_text(
+                f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🌍 `Region:` **{c_flag} {c_name}**\n"
+                f"🆔 `Session ID:` `{number_id}`\n"
+                f"⏱️ `Status:` **Waiting for Secure OTP...**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👇 *নাম্বার কপি করতে নিচের বাটনে চাপ দিন:*",
+                reply_markup=number_buttons,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await query.message.reply_text("❌ **Server Busy!** এই রেঞ্জে বর্তমানে কোনো আসল নম্বর খালি নেই। অন্য রেঞ্জ চেষ্টা করুন।")
         
     elif data.startswith("copy_"):
         num = data.split("_")[1]
@@ -135,10 +163,11 @@ async def handle_message(update: Update, context: CallbackContext):
         return
     text = update.message.text
 
-    if text == "🎲 GET NUMBER":
-        await show_ranges_menu(update.message, "Facebook")
+    # কিবোর্ড টেক্সট ম্যাচিং আপডেট করা হয়েছে
+    if text == "📱 GET NUMBER":
+        await show_ranges_menu(update.message)
         
-    elif text == "🔐 2FA CODE":
+    elif text == "🔑 2FA CODE":
         await update.message.reply_text(
             "🔑 **SECURE 2FA CODE DECRYPTER**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -156,7 +185,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 DYNAMIC ENGINE LIVE (NO BALANCE MODE)...")
+    print("🚀 100% ORIGINAL DYNAMIC ENGINE RUNNING...")
     app.run_polling()
 
 if __name__ == '__main__':
