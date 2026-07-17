@@ -21,12 +21,12 @@ except ValueError:
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 📱 প্রফেশনাল মিনিমাল কিবোর্ড 
+# 📱 নিচে মেইন কিবোর্ডের ইমোজি ও নাম প্রফেশনাল করা হলো (লুডু আইকন মুক্ত)
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("📱 GET NUMBER"), KeyboardButton("🔑 2FA CODE")]
 ], resize_keyboard=True, is_persistent=True)
 
-# 🌍 নম্বর থেকে দেশ চেনার লাইভ ট্র্যাকার
+# 🌍 নম্বর বা রেঞ্জ থেকে দেশ চেনার ইন্টেলিজেন্ট ম্যাপার
 def get_flag_and_name(number_str):
     if not number_str:
         return "International", "🌍"
@@ -47,24 +47,30 @@ def get_flag_and_name(number_str):
     for prefix, info in country_map.items():
         if clean_num.startswith(prefix):
             return info
-    return ("International Server", "🌍")
+    return (f"Range (+{clean_num[:3]})", "🌍")
 
-# 📡 ওয়েবসাইট থেকে সরাসরি রিয়েল-টাইম ডাটা আনার ফিক্সড GET মেথড
-def fetch_from_website(endpoint, params=None):
+# 📡 আপনার ওয়েবসাইটের সার্ভারে কানেক্ট করার সেন্ট্রাল স্মার্ট ইঞ্জিন
+def call_website_api(payload):
     try:
-        # বেস ইউআরএল ফিক্সড করা হয়েছে
         url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
         headers = {
             "X-API-Key": API_KEY,
+            "Content-Type": "application/json",
             "Accept": "application/json"
         }
         
-        # আপনার ওয়েবসাইটে ডাটা কুয়েরি করার জন্য সঠিক GET রিকোয়েস্ট পাঠানো হচ্ছে
-        r = requests.get(url, headers=headers, params=params, timeout=15)
+        # আপনার প্রোভাইডারের সার্ভারে JSON ডাটা সহ POST রিকোয়েস্ট পাঠানো হচ্ছে
+        logging.info(f"Sending to Website Server: {payload}")
+        r = requests.post(url, json=payload, headers=headers, timeout=20)
+        
+        # রেলওয়ে বা গিটহাব লগ-এ দেখার জন্য সার্ভার রেসপন্স প্রিন্ট
+        logging.info(f"Website Server Status Code: {r.status_code}")
+        logging.info(f"Raw Website Response Text: {r.text}")
+        
         if r.status_code == 200:
             return r.json()
     except Exception as e:
-        logging.error(f"Website API Connection Error: {e}")
+        logging.error(f"Critical Connection Error to 2eee7.com: {e}")
     return None
 
 async def start(update: Update, context: CallbackContext):
@@ -81,29 +87,39 @@ async def start(update: Update, context: CallbackContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 🔄 ওয়েবসাইট থেকে লাইভ আসা আসল রেঞ্জ দিয়ে মেনু তৈরি
+# 🔄 সার্ভার থেকে লাইভ আসা আসল রেঞ্জ দিয়ে ডাইনামিক ব্লু-মেনু তৈরি
 async def show_ranges_menu(message_obj):
-    # আপনার ওয়েবসাইট থেকে সরাসরি ফেসবুকের লাইভ রেঞ্জ রিকোয়েস্ট করা হচ্ছে
-    api_response = fetch_from_website("ranges", params={"service": "facebook"})
+    # ট্রাই ১: স্ট্যান্ডার্ড মেথড
+    api_response = call_website_api({"action": "get_ranges", "service": "facebook"})
     
+    # ট্রাই ২: যদি প্রথমবার সাড়া না দেয়, বিকল্প ফরম্যাটে ট্রাই করা
+    if not api_response or api_response.get("meta", {}).get("status") != "ok":
+        api_response = call_website_api({"action": "getnum", "service": "facebook"})
+        
     buttons = []
     
-    # ওয়েবসাইট রেসপন্স থেকে ডাইনামিক বাটন জেনারেশন
-    if api_response and "ranges" in api_response:
-        for r in api_response["ranges"]:
-            c_name, c_flag = get_flag_and_name(r)
-            buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{r}")])
-    
-    # রেসপন্স লিস্ট যদি কোনো অবজেক্ট বা আলাদা ফিল্ডে থাকে (বিকল্প স্ট্রাকচার হ্যান্ডলিং)
-    elif api_response and isinstance(api_response, dict) and "data" in api_response:
-        ranges_list = api_response.get("data", {}).get("ranges", [])
-        for r in ranges_list:
-            c_name, c_flag = get_flag_and_name(r)
-            buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{r}")])
+    # ১. যদি রেসপন্স ডাটা মেটা-স্ট্যাটাস ওকের ভেতরে থাকে
+    if api_response and isinstance(api_response, dict):
+        data_part = api_response.get("data", {})
+        ranges_list = []
+        if isinstance(data_part, dict):
+            ranges_list = data_part.get("ranges") or data_part.get("live_ranges") or []
+        elif isinstance(api_response.get("ranges"), list):
+            ranges_list = api_response.get("ranges")
 
+        if ranges_list:
+            for r in ranges_list:
+                c_name, c_flag = get_flag_and_name(r)
+                buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{r}")])
+    
+    # ❌ এপিআই যদি কোনো ভ্যালিড রেঞ্জ লিস্ট না পাঠায়, তবে ইউজারকে স্পষ্টভাবে অ্যালার্ট দেবে
     if not buttons:
-        await message_obj.reply_text("⚠️ **আপনার ওয়েবসাইট থেকে কোনো লাইভ রেঞ্জ পাওয়া যায়নি!** এপিআই কি অথবা সার্ভার স্ট্যাটাস চেক করুন।",
-                                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 ⚡ REFRESH ⚡ 🔄", callback_data="refresh_ranges")]]))
+        await message_obj.reply_text(
+            "⚠️ **আপনার ওয়েবসাইট থেকে কোনো লাইভ রেঞ্জ পাওয়া যায়নি!**\n"
+            "🔍 `কারণ:` এপিআই কী অবৈধ অথবা সার্ভারে বর্তমানে কোনো রেঞ্জ সচল নেই।\n"
+            "💻 *অনুগ্রহ করে রেলওয়ে/সার্ভার লগ-এ আসল রেসপন্সটি চেক করুন।*",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 ⚡ TRY REFRESH ⚡ 🔄", callback_data="refresh_ranges")]])
+        )
         return
         
     buttons.append([InlineKeyboardButton("🔄 ⚡ REFRESH RANGES ⚡ 🔄", callback_data="refresh_ranges")])
@@ -129,24 +145,24 @@ async def handle_callback(update: Update, context: CallbackContext):
 
     elif data.startswith("range_"):
         selected_range = data.split("_")[1]
-        status_msg = await query.message.reply_text("⏳ **Connecting to Website Server... Fetching Real Number...**")
+        status_msg = await query.message.reply_text("⏳ **Connecting to Website... Requesting Real Number...**")
         
-        # ওয়েবসাইটে নির্দিষ্ট রেঞ্জ পাঠিয়ে একদম আসল নম্বর জেনারেট করা হচ্ছে
-        api_response = fetch_from_website("getnumber", params={"service": "facebook", "range": selected_range})
+        # আপনার এপিআই প্রোভাইডারের কাছে নম্বর চাওয়ার জন্য পোস্ট বডি
+        api_response = call_website_api({"range": selected_range, "action": "get_number", "service": "facebook"})
         await status_msg.delete()
         
-        if api_response:
-            # প্রোভাইডারের ডাটা ফরম্যাট অনুযায়ী অরিজিনাল নম্বর ও আইডি এক্সট্র্যাক্ট করা
-            original_number = api_response.get("number") or api_response.get("data", {}).get("full_number")
-            number_id = api_response.get("id") or api_response.get("data", {}).get("id")
+        if api_response and api_response.get("meta", {}).get("status") == "ok":
+            number_data = api_response.get("data", {})
+            original_number = number_data.get("full_number") or number_data.get("number")
+            number_id = number_data.get("id")
             
             if original_number:
                 c_name, c_flag = get_flag_and_name(original_number)
                 
-                # 💎 নীল এবং সাদা থিমের লাক্সারি বাটন লেআউট
+                # 💎 নীল ও সাদা ডিজাইনের আকর্ষণীয় বাটন লেআউট
                 number_buttons = InlineKeyboardMarkup([
                     [InlineKeyboardButton(f"🔷 📋 +{original_number} (Tap to Copy) 🔷", callback_data=f"copy_{original_number}")],
-                    [InlineKeyboardButton("🔹 Change Number 🔹", callback_data=f"range_{selected_range}")],
+                    [InlineKeyboardButton("🔹 Request Another Number 🔹", callback_data=f"range_{selected_range}")],
                     [InlineKeyboardButton("🌐 Change Country Range 🌐", callback_data="refresh_ranges")]
                 ])
                 
@@ -156,7 +172,7 @@ async def handle_callback(update: Update, context: CallbackContext):
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"🌍 `Region:` **{c_flag} {c_name}**\n"
                     f"🆔 `Session ID:` `{number_id}`\n"
-                    f"⏱️ `Status:` **Waiting for Real OTP from Website...**\n"
+                    f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"👇 *নাম্বার কপি করতে নিচের নীল বাটনে চাপ দিন:*",
                     reply_markup=number_buttons,
@@ -164,7 +180,7 @@ async def handle_callback(update: Update, context: CallbackContext):
                 )
                 return
                 
-        await query.message.reply_text("❌ **সার্ভার রেসপন্স ফেইল!** আপনার ওয়েবসাইট বর্তমানে এই রেঞ্জের কোনো আসল নম্বর সাপ্লাই দিতে পারছে না।")
+        await query.message.reply_text("❌ **সার্ভার রেসপন্স ফেইল!** আপনার ওয়েবসাইট এই রেঞ্জে বর্তমানে কোনো আসল নম্বর দিতে পারছে না।")
         
     elif data.startswith("copy_"):
         num = data.split("_")[1]
