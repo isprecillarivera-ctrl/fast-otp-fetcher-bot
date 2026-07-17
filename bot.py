@@ -24,12 +24,12 @@ OTP_PATTERN = re.compile(r'\b(\d{4,8})\b')
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 📱 ফিক্সড প্রফেশনাল কিবোর্ড (লুডুর ইমোজি সরিয়ে মোবাইল ও কি-এর সঠিক আইকন দেওয়া হয়েছে)
+# 📱 প্রফেশনাল কিবোর্ড
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("📱 GET NUMBER"), KeyboardButton("🔑 2FA CODE")]
 ], resize_keyboard=True, is_persistent=True)
 
-# 🌍 ফোন নম্বরের শুরু দেখে সঠিক দেশ ও পতাকা খোঁজার লোকাল ডাইনামিক ইঞ্জিন
+# 🌍 অরিজিনাল নম্বরের শুরু দেখে সঠিক দেশ ও পতাকা খোঁজার ইঞ্জিন
 def get_flag_and_name(number_str):
     if not number_str:
         return "International", "🌍"
@@ -55,19 +55,22 @@ def get_flag_and_name(number_str):
     for prefix, info in country_map.items():
         if clean_num.startswith(prefix):
             return info
-    return ("International Server", "🌍")
+    return (f"Country (+{clean_num[:3]})", "🌍")
 
-# 📡 এপিআই থেকে লাইভ রেঞ্জ বা আসল নম্বর তুলে আনার সেন্ট্রাল ইঞ্জিন
+# 📡 প্রোভাইডারের এপিআই থেকে বাস্তব রেঞ্জ ও নম্বর তুলে আনার ফাংশন
 def call_sms_api(payload):
     try:
         url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
-        headers = {"X-API-Key": API_KEY}
+        headers = {
+            "X-API-Key": API_KEY,
+            "Content-Type": "application/json"
+        }
+        # আপনার এপিআই প্রোভাইডারের সার্ভারে রিকোয়েস্ট পাঠানো হচ্ছে
         r = requests.post(url, json=payload, headers=headers, timeout=20)
-        data = r.json()
-        if data.get("meta", {}).get("status") == "ok":
-            return data.get("data", {})
+        if r.status_code == 200:
+            return r.json()
     except Exception as e:
-        logging.error(f"API Connection Error: {e}")
+        logging.error(f"API Error: {e}")
     return None
 
 async def start(update: Update, context: CallbackContext):
@@ -84,27 +87,32 @@ async def start(update: Update, context: CallbackContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 🔄 এপিআই ডেটা অনুযায়ী ডাইনামিক রেঞ্জ মেনু তৈরি
+# 🔄 সার্ভার থেকে লাইভ আসা আসল রেঞ্জ দিয়ে মেনু তৈরি
 async def show_ranges_menu(message_obj):
-    api_response = call_sms_api({"action": "get_ranges", "service": "facebook"})
+    # আপনার সার্ভার থেকে বর্তমানের সচল ও অরিজিনাল রেঞ্জগুলোর লিস্ট চাওয়া হচ্ছে
+    api_response = call_sms_api({"action": "get_active_ranges", "service": "facebook"})
+    
     buttons = []
     
-    if api_response and "ranges" in api_response:
-        for r in api_response["ranges"]:
-            c_name, c_flag = get_flag_and_name(r)
-            buttons.append([InlineKeyboardButton(f"📡 {c_flag} {c_name} ({r})", callback_data=f"range_{r}")])
-    else:
-        fallback_ranges = ["26134", "224655", "23274"]
-        for r in fallback_ranges:
+    if api_response and api_response.get("meta", {}).get("status") == "ok":
+        ranges_list = api_response.get("data", {}).get("ranges", [])
+        
+        for r in ranges_list:
             c_name, c_flag = get_flag_and_name(r)
             buttons.append([InlineKeyboardButton(f"📡 {c_flag} {c_name} ({r})", callback_data=f"range_{r}")])
     
+    # এপিআই রেসপন্স খালি থাকলে বা কোনো রেঞ্জ না পাওয়া গেলে ইউজারকে অ্যালার্ট দেবে
+    if not buttons:
+        await message_obj.reply_text("⚠️ **বর্তমানে সার্ভারে কোনো লাইভ রেঞ্জ খালি নেই!** অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন বা রিফ্রেশ দিন।",
+                                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 ⚡ REFRESH ⚡ 🔄", callback_data="refresh_ranges")]]))
+        return
+        
     buttons.append([InlineKeyboardButton("🔄 ⚡ REFRESH RANGES ⚡ 🔄", callback_data="refresh_ranges")])
     
     await message_obj.reply_text(
         f"🔥 **LIVE ACTIVE RANGES FOR FACEBOOK**\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👇 *সিলেক্ট করুন কোন দেশের নাম্বার প্রয়োজন:*",
+        f"👇 *সার্ভার থেকে প্রাপ্ত সচল রেঞ্জ সিলেক্ট করুন:*",
         reply_markup=InlineKeyboardMarkup(buttons),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -122,20 +130,23 @@ async def handle_callback(update: Update, context: CallbackContext):
 
     elif data.startswith("range_"):
         selected_range = data.split("_")[1]
-        status_msg = await query.message.reply_text("⏳ **Connecting to Server... Fetching Original Number...**")
+        status_msg = await query.message.reply_text("⏳ **Connecting to Server... Requesting Original Number...**")
         
-        api_response = call_sms_api({"range": selected_range, "action": "get_number"})
+        # 📡 এপিআই-তে আসল সিলেক্টেড রেঞ্জ পাঠিয়ে একদম অরিজিনাল নম্বর আনা হচ্ছে
+        api_response = call_sms_api({"range": selected_range, "action": "get_number", "service": "facebook"})
         await status_msg.delete()
         
-        if api_response and "full_number" in api_response:
-            original_number = api_response.get("full_number")
-            number_id = api_response.get("id")
+        if api_response and api_response.get("meta", {}).get("status") == "ok":
+            number_data = api_response.get("data", {})
+            original_number = number_data.get("full_number")
+            number_id = number_data.get("id")
             
             c_name, c_flag = get_flag_and_name(original_number)
             
+            # 💎 প্রফেশনাল ট্যাপ-টু-কপি লেআউট
             number_buttons = InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"📋 🔗 +{original_number} (Tap to Copy)", callback_data=f"copy_{original_number}")],
-                [InlineKeyboardButton("🔄 Change Number", callback_data=f"range_{selected_range}")],
+                [InlineKeyboardButton("🔄 Request Another Number", callback_data=f"range_{selected_range}")],
                 [InlineKeyboardButton("🌐 Change Country Range", callback_data="refresh_ranges")]
             ])
             
@@ -152,7 +163,8 @@ async def handle_callback(update: Update, context: CallbackContext):
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
-            await query.message.reply_text("❌ **Server Busy!** এই রেঞ্জে বর্তমানে কোনো আসল নম্বর খালি নেই। অন্য রেঞ্জ চেষ্টা করুন।")
+            error_msg = api_response.get("meta", {}).get("message", "কোনো নম্বর পাওয়া যায়নি।") if api_response else "সার্ভার রেসপন্স করছে না।"
+            await query.message.reply_text(f"❌ **API Error:** {error_msg}")
         
     elif data.startswith("copy_"):
         num = data.split("_")[1]
@@ -163,7 +175,6 @@ async def handle_message(update: Update, context: CallbackContext):
         return
     text = update.message.text
 
-    # কিবোর্ড টেক্সট ম্যাচিং আপডেট করা হয়েছে
     if text == "📱 GET NUMBER":
         await show_ranges_menu(update.message)
         
@@ -171,7 +182,7 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text(
             "🔑 **SECURE 2FA CODE DECRYPTER**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📥 অনুগ্রহ করে আপনার অ্যাকাউন্টের **2FA Secret Key**টি নিচে পেস্ট করুন।",
+            "📥 অনুগ্রহ করে আপনার অ্যাকাуন্টের **2FA Secret Key**টি নিচে পেস্ট করুন।",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -185,7 +196,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 100% ORIGINAL DYNAMIC ENGINE RUNNING...")
+    print("🚀 100% ORIGINAL API ENGINE LIVE...")
     app.run_polling()
 
 if __name__ == '__main__':
