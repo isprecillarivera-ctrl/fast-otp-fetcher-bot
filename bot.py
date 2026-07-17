@@ -32,50 +32,47 @@ main_keyboard = ReplyKeyboardMarkup([
 
 # 🔵 🟠 প্রিমিয়াম বাটন লেআউট
 num_keyboard = InlineKeyboardMarkup([
-    [InlineKeyboardButton("🟦 Facebook Premium (Official)", callback_data="num_fb")],
-    [InlineKeyboardButton("🟧 Instagram Premium (Official)", callback_data="num_ig")],
+    [InlineKeyboardButton("🟦 Facebook Premium", callback_data="num_fb")],
+    [InlineKeyboardButton("🟧 Instagram Premium", callback_data="num_ig")],
     [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_main")]
 ])
 
-# 🌍 ১০০% ডাইনামিক কান্ট্রি ও ফ্ল্যাগ ডিটেক্টর (API ভিত্তিক)
-def get_dynamic_country(number):
+# 🌍 লোকাল ফুল কান্ট্রি ও ফ্ল্যাগ ম্যাপার (কোনো এপিআই ফেইলর বা ব্লকিং এর ঝামেলা নেই)
+def get_clean_country(number):
     if not number:
         return "Unknown Country 🌐"
     
-    # শুধু সংখ্যাগুলো ফিল্টার করা
     clean_num = re.sub(r'\D', '', str(number))
     
-    try:
-        # গ্লোবাল রেস্ট কান্ট্রিজ API ব্যবহার করে দেশের নাম ও সঠিক পতাকা বের করা
-        # এটি যেকোনো ইন্টারন্যাশনাল ফোন রেঞ্জ স্বয়ংক্রিয়ভাবে ডিটেক্ট করতে পারে
-        response = requests.get(f"https://restcountries.com/v3.1/all", timeout=5)
-        if response.status_code == 200:
-            countries = response.json()
-            # কান্ট্রি কোডের লেন্থ বড় থেকে ছোট অনুযায়ী চেক (যেমন: ৩ ডিজিট, তারপর ২ ডিজিট)
-            for length in [3, 2, 1]:
-                prefix = clean_num[:length]
-                for country in countries:
-                    idd = country.get('idd', {})
-                    root = idd.get('root', '')
-                    suffixes = idd.get('suffixes', [])
-                    
-                    # দেশের ফুল কলিং কোড তৈরি করা
-                    for suffix in suffixes:
-                        full_code = f"{root}{suffix}".replace("+", "")
-                        if full_code == prefix:
-                            name = country.get('name', {}).get('common', 'Unknown')
-                            flag = country.get('flag', '🌐')
-                            return f"{name} {flag}"
-                    
-                    # শুধু রুট কোড ম্যাচ হলে (যেমন: USA/Canada এর জন্য +1)
-                    if root.replace("+", "") == prefix:
-                        name = country.get('name', {}).get('common', 'Unknown')
-                        flag = country.get('flag', '🌐')
-                        return f"{name} {flag}"
-    except Exception:
-        pass
-        
-    return "International Server 🌍"
+    # আন্তর্জাতিক ডায়ালিং রেঞ্জ অনুযায়ী নিখুঁত দেশ ও পতাকা ডাটাবেজ
+    country_map = {
+        "261": "Madagascar 🇲🇬",
+        "232": "Sierra Leone 🇸🇱",
+        "236": "Central African Republic 🇨🇫",
+        "880": "Bangladesh 🇧🇩",
+        "91": "India 🇮🇳",
+        "62": "Indonesia 🇮🇩",
+        "63": "Philippines 🇵🇭",
+        "84": "Vietnam 🇻🇳",
+        "225": "Ivory Coast 🇨🇮",
+        "380": "Ukraine 🇺🇦",
+        "92": "Pakistan 🇵🇰",
+        "20": "Egypt 🇪🇬",
+        "966": "Saudi Arabia 🇸🇦",
+        "971": "UAE 🇦🇪",
+        "998": "Uzbekistan 🇺🇿",
+        "234": "Nigeria 🇳🇬",
+        "254": "Kenya 🇰🇪",
+        "1": "USA/Canada 🇺🇸",
+        "7": "Russia 🇷🇺",
+        "44": "United Kingdom 🇬🇧"
+    }
+    
+    for prefix in sorted(country_map.keys(), key=len, reverse=True):
+        if clean_num.startswith(prefix):
+            return country_map[prefix]
+            
+    return f"International (+{clean_num[:3]}) 🌍"
 
 async def get_number(service):
     try:
@@ -119,11 +116,10 @@ async def handle_callback(update: Update, context: CallbackContext):
         await status_msg.delete()
         
         if number:
-            country = get_dynamic_country(number)
-            # ফেসবুকের রিয়েল লোগো প্রিভিউ লিংক সহ মেসেজ
-            fb_logo_url = "https://i.imgur.com/3bpfw8G.png"
+            country = get_clean_country(number)
+            # ইমেজের ঝামেলা বাদ দিয়ে সরাসরি প্রিমিয়াম টেক্সট স্টাইল
             await query.message.reply_text(
-                f"[ ]({fb_logo_url})🟦 **FACEBOOK OFFICIAL SERVICE**\n"
+                f"🔷 **FACEBOOK OFFICIAL SERVICE** 🔷\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🌍 **Country:** {country}\n"
                 f"📱 **Number:** `{number}`\n"
@@ -141,11 +137,9 @@ async def handle_callback(update: Update, context: CallbackContext):
         await status_msg.delete()
         
         if number:
-            country = get_dynamic_country(number)
-            # ইনস্টাগ্রামের রিয়েল লোগো প্রিভিউ লিংক সহ মেসেজ
-            ig_logo_url = "https://i.imgur.com/x5S6B8u.png"
+            country = get_clean_country(number)
             await query.message.reply_text(
-                f"[ ]({ig_logo_url})🟧 **INSTAGRAM OFFICIAL SERVICE**\n"
+                f"🔸 **INSTAGRAM OFFICIAL SERVICE** 🔸\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🌍 **Country:** {country}\n"
                 f"📱 **Number:** `{number}`\n"
