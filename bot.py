@@ -126,7 +126,7 @@ async def show_ranges_menu(message_obj, service_name):
     )
 
 # 📩 ওটিপি রিসিভ করার লুপ
-async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_msg_id, number_str, c_flag, c_name):
+async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_msg_id, number_str, c_flag, c_name, service_name):
     for _ in range(30): 
         await asyncio.sleep(7) 
         api_response = await call_website_api_async({"action": "getotp", "id": number_id})
@@ -134,21 +134,26 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
-                # নিচের কপি বাটনে চাপ দিলে এখন ফ্ল্যাশ পপ-আপ অ্যালার্টে ওটিপি শো করবে এবং ইউজার কপি করতে পারবে!
+                # ওটিপি পাওয়ার পর শুধুমাত্র 'Change Number' বাটন থাকবে
                 success_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🟢 🔥 [ {otp_code} ] - চাপুন ও কপি করুন 🟢", callback_data=f"copy_{otp_code}")]
+                    [InlineKeyboardButton("🔄 Change Number 🔄", callback_data=f"service_{service_name}")]
                 ])
                 try:
                     await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=original_msg_id,
-                        text=f"✅ **OTP CODE RECEIVED SUCCESSFULLY!** ✅\n"
+                        text=f"🟢 **VIP OTP RECEIVED SUCCESSFULLY** 🟢\n"
                              f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                              f"🌍 `Region:` **{c_flag} {c_name}**\n"
                              f"📱 `Number:` `+{number_str}`\n"
-                             f"🔑 `Your OTP:` `{otp_code}` *(১-ট্যাপে কপি করতে ওপরে ক্লিক করুন)*\n"
                              f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                             f"👇 **অথবা নিচের বড় বাটনে চাপ দিয়ে কপি সম্পন্ন করুন:**",
+                             f"🎁 **YOUR OTP CODE IS BELOW:**\n"
+                             f"👇 👇 👇 👇 👇 👇 👇 👇\n\n"
+                             f"⚡⚡ `{otp_code}` ⚡⚡\n\n"
+                             f"👆 👆 👆 👆 👆 👆 👆 👆\n"
+                             f"👉 *(কোডটি কপি করতে ওপরে বড় সংখ্যার ওপর জাস্ট ১-ট্যাপ করুন)*\n"
+                             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                             f"⏱️ `Status:` **Done! Verification Completed.**",
                         reply_markup=success_buttons,
                         parse_mode=ParseMode.MARKDOWN
                     )
@@ -156,10 +161,14 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
                     pass
                 return
     try:
+        fallback_buttons = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Try Another Number 🔄", callback_data=f"service_{service_name}")]
+        ])
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=original_msg_id,
-            text=f"❌ **OTP Timeout!** কোনো ওটিপি কোড পাওয়া যায়নি।"
+            text=f"❌ **OTP Timeout!** কোনো ওটিপি কোড পাওয়া যায়নি। অন্য নাম্বার চেষ্টা করুন।",
+            reply_markup=fallback_buttons
         )
     except Exception:
         pass
@@ -199,36 +208,35 @@ async def handle_callback(update: Update, context: CallbackContext):
             if original_number:
                 c_name, c_flag = get_flag_and_name(original_number)
                 
+                # ফালতু কপি বাটন ডিলিট করে শুধু কাজের চেঞ্জ বাটন রাখা হলো
                 number_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🟢 🔥 [ +{original_number} ] - চাপুন ও কপি করুন 🟢", callback_data=f"copy_{original_number}")],
-                    [InlineKeyboardButton("🔹 Change Number 🔹", callback_data=f"service_{service_name}")]
+                    [InlineKeyboardButton("🔄 Change Number 🔄", callback_data=f"service_{service_name}")]
                 ])
                 
                 await query.message.delete()
                 
+                # নাম্বার ডিসপ্লে ডিজাইন আল্ট্রা-বোল্ড ও পরিষ্কার করা হলো
                 sent_msg = await query.message.reply_text(
                     f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"🌍 `Region:` **{c_flag} {c_name}**\n"
                     f"🆔 `Session ID:` `{number_id}`\n"
-                    f"📱 `Assigned Number:` `+{original_number}`\n"
-                    f"👉 *(নম্বরটি ১-ট্যাপে কপি করতে ওপরে নম্বরের লেখাটির ওপর টাচ করুন)*\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
-                    f"👇 **অথবা নিচের বড় বাটনে চাপ দিয়ে কপি সম্পন্ন করুন:**",
+                    f"📱 **YOUR PHONE NUMBER IS BELOW:**\n"
+                    f"👇 👇 👇 👇 👇 👇 👇 👇\n\n"
+                    f"⚡⚡ `+{original_number}` ⚡⚡\n\n"
+                    f"👆 👆 👆 👆 👆 👆 👆 👆\n"
+                    f"👉 *(নাম্বারটি কপি করতে ওপরে বড় নম্বরের ওপর জাস্ট ১-ট্যাপ করুন)*\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**",
                     reply_markup=number_buttons,
                     parse_mode=ParseMode.MARKDOWN
                 )
                 
-                asyncio.create_task(check_otp_loop(context, query.message.chat_id, number_id, sent_msg.message_id, original_number, c_flag, c_name))
+                asyncio.create_task(check_otp_loop(context, query.message.chat_id, number_id, sent_msg.message_id, original_number, c_flag, c_name, service_name))
                 return
                 
         await query.message.reply_text(f"❌ **API Error:** আপনার ওয়েবসাইট বর্তমানে এই নম্বরটি দিতে পারছে না।")
-        
-    elif data.startswith("copy_"):
-        # 🔥 এখানে `show_alert=True` করার কারণে এখন বাটনে চাপ দিলে মোবাইল স্ক্রিনে পপ-আপ অ্যালার্ট ভেসে উঠবে এবং সফলভাবে কাজ করবে!
-        num = data.split("_")[1]
-        await query.answer(text=f"✅ Copy Successful:\n+{num}\n\n(এখন যেকোনো জায়গায় পেস্ট করতে পারবেন)", show_alert=True)
 
 async def handle_message(update: Update, context: CallbackContext):
     if not update.message or not update.message.text:
@@ -256,5 +264,5 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
-if __name__ == '__main__':
+ if __name__ == '__main__':
     main()
