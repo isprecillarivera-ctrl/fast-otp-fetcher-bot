@@ -22,10 +22,10 @@ except ValueError:
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 👑 দুটি অপশনকে আলাদা লাইনে দিয়ে বিশাল বড় (Full Width) ও গ্লোয়িং করা হলো
+# 👑 নিচের অপশন দুটিকে আরও চওড়া, বড় এবং আকর্ষণীয় হাইলাইটার দিয়ে সাজানো হলো
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🔥 ━━━━ [ GET NUMBER ] ━━━━ 🔥")],
-    [KeyboardButton("🔑 ━━━━ [ 2FA CODE ] ━━━━ 🔑")]
+    [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")],
+    [KeyboardButton("🔑 ⚡ ━━━━━━ [ 2FA CODE ] ━━━━━━ ⚡ 🔑")]
 ], resize_keyboard=True, is_persistent=True)
 
 # 🌍 দেশ ও পতাকা ম্যাপার
@@ -51,7 +51,7 @@ def get_flag_and_name(number_str):
             return info
     return (f"Country (+{clean_num[:3]})", "🌍")
 
-# 📡 ১০০% অ্যাসিনক্রোনাস (Async) এপিআই রিকোয়েস্ট - যা বটের স্পিড ১০ গুণ বাড়িয়ে দেবে
+# 📡 অ্যাসিনক্রোনাস (Async) এপিআই রিকোয়েস্টার
 async def call_website_api_async(payload):
     try:
         url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
@@ -60,7 +60,6 @@ async def call_website_api_async(payload):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        # httpx ব্যবহারের ফলে বট রিকোয়েস্ট পাঠানোর সময় আটকে থাকবে না
         async with httpx.AsyncClient() as client:
             r = await client.post(url, json=payload, headers=headers, timeout=15.0)
             if r.status_code == 200:
@@ -126,19 +125,20 @@ async def show_ranges_menu(message_obj, service_name):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 📩 ওটিপি রিসিভ করার লুপ (সম্পূর্ণ ব্যাকগ্রাউন্ড টাস্ক)
+# 📩 ওটিপি রিসিভ করার লুপ (১-ট্যাপে ওটিপি ও কপি ফিচার সহ)
 async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_msg_id, number_str, c_flag, c_name):
     for _ in range(30): 
-        await asyncio.sleep(7) # প্রতি ৭ সেকেন্ড পর পর ব্যাকগ্রাউন্ডে চেক করবে
+        await asyncio.sleep(7) 
         api_response = await call_website_api_async({"action": "getotp", "id": number_id})
         
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
                 success_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🟢 📋 {otp_code} (Tap to Copy) 🟢", callback_data=f"copy_{otp_code}")]
+                    [InlineKeyboardButton(f"🟢 📋 {otp_code} (কপি করতে চাপুন) 🟢", callback_data=f"copy_{otp_code}")]
                 ])
                 try:
+                    # এখানে `{otp_code}` ওপরে জাস্ট টাচ করলেই অটোমেটিক কপি হয়ে যাবে!
                     await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=original_msg_id,
@@ -146,9 +146,9 @@ async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_
                              f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                              f"🌍 `Region:` **{c_flag} {c_name}**\n"
                              f"📱 `Number:` `+{number_str}`\n"
-                             f"🔑 **YOUR OTP CODE:** `{otp_code}`\n"
+                             f"🔑 `Your OTP:` `{otp_code}` *(১-ট্যাপে কপি করতে ওপরে ক্লিক করুন)*\n"
                              f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                             f"👇 *ওটিপি কোডটি কপি করতে নিচের বাটনে চাপ দিন:*",
+                             f"👇 *অথবা নিচের কপি বাটনে চাপ দিন:*",
                         reply_markup=success_buttons,
                         parse_mode=ParseMode.MARKDOWN
                     )
@@ -198,20 +198,23 @@ async def handle_callback(update: Update, context: CallbackContext):
                 c_name, c_flag = get_flag_and_name(original_number)
                 
                 number_buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"🟢 📋 +{original_number} (Copy) 🟢", callback_data=f"copy_{original_number}")],
+                    [InlineKeyboardButton(f"🟢 📋 +{original_number} (কপি করতে চাপুন) 🟢", callback_data=f"copy_{original_number}")],
                     [InlineKeyboardButton("🔹 Change Number 🔹", callback_data=f"service_{service_name}")]
                 ])
                 
                 await query.message.delete()
                 
+                # এখানে `+{original_number}` এর ওপর ক্লিক করলেই ইনস্ট্যান্ট কপি হয়ে যাবে!
                 sent_msg = await query.message.reply_text(
                     f"⚡ **NUMBER SUCCESSFULLY ASSIGNED** ⚡\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"🌍 `Region:` **{c_flag} {c_name}**\n"
                     f"🆔 `Session ID:` `{number_id}`\n"
-                    f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
+                    f"📱 `Assigned Number:` `+{original_number}`\n"
+                    f"👉 *(নম্বরটি ১-ট্যাপে কপি করতে ওপরে নম্বরের লেখাটির ওপর টাচ করুন)*\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"👇 *নাম্বার কপি করতে নিচের বাটনে চাপ দিন:*",
+                    f"⏱️ `Status:` **Waiting for Real OTP from Website Server...**\n"
+                    f"👇 *অথবা নিচের কপি বাটনে চাপ দিন:*",
                     reply_markup=number_buttons,
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -230,10 +233,10 @@ async def handle_message(update: Update, context: CallbackContext):
         return
     text = update.message.text
 
-    if text == "🔥 ━━━━ [ GET NUMBER ] ━━━━ 🔥":
+    if text == "🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥":
         await show_services_menu(update.message)
         
-    elif text == "🔑 ━━━━ [ 2FA CODE ] ━━━━ 🔑":
+    elif text == "🔑 ⚡ ━━━━━━ [ 2FA CODE ] ━━━━━━ ⚡ 🔑":
         await update.message.reply_text(
             "🔑 **SECURE 2FA CODE DECRYPTER**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
