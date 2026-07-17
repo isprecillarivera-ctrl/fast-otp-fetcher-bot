@@ -1,7 +1,7 @@
 import logging
 import re
 import os
-import requests
+import httpx
 import pyotp
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -22,9 +22,10 @@ except ValueError:
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 🚀 নিচের মূল অপশন দুটিকে আরও বড় ও আকর্ষণীয় গ্লোয়িং ইমোজি দিয়ে সাজানো হলো
+# 👑 দুটি অপশনকে আলাদা লাইনে দিয়ে বিশাল বড় (Full Width) ও গ্লোয়িং করা হলো
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🔥 [ GET NUMBER ] 🔥"), KeyboardButton("🔑 [ 2FA CODE ] 🔑")]
+    [KeyboardButton("🔥 ━━━━ [ GET NUMBER ] ━━━━ 🔥")],
+    [KeyboardButton("🔑 ━━━━ [ 2FA CODE ] ━━━━ 🔑")]
 ], resize_keyboard=True, is_persistent=True)
 
 # 🌍 দেশ ও পতাকা ম্যাপার
@@ -50,8 +51,8 @@ def get_flag_and_name(number_str):
             return info
     return (f"Country (+{clean_num[:3]})", "🌍")
 
-# 📡 সেন্ট্রাল এপিআই রিকোয়েস্টার
-def call_website_api(payload):
+# 📡 ১০০% অ্যাসিনক্রোনাস (Async) এপিআই রিকোয়েস্ট - যা বটের স্পিড ১০ গুণ বাড়িয়ে দেবে
+async def call_website_api_async(payload):
     try:
         url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
         headers = {
@@ -59,11 +60,13 @@ def call_website_api(payload):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        r = requests.post(url, json=payload, headers=headers, timeout=20)
-        if r.status_code == 200:
-            return r.json()
+        # httpx ব্যবহারের ফলে বট রিকোয়েস্ট পাঠানোর সময় আটকে থাকবে না
+        async with httpx.AsyncClient() as client:
+            r = await client.post(url, json=payload, headers=headers, timeout=15.0)
+            if r.status_code == 200:
+                return r.json()
     except Exception as e:
-        logging.error(f"API Error: {e}")
+        logging.error(f"Async API Error: {e}")
     return None
 
 async def start(update: Update, context: CallbackContext):
@@ -80,11 +83,11 @@ async def start(update: Update, context: CallbackContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 🛍️ ধাপ ১: সার্ভিস সিলেকশন মেনু (কালারফুল এবং আকর্ষণীয় বাটন টেক্সট)
+# 🛍️ সার্ভিস সিলেকশন মেনু
 async def show_services_menu(message_obj):
     buttons = [
-        [InlineKeyboardButton("🔵 🔵 FACEBOOK (ফেসবুক) 🔵 🔵", callback_data="service_facebook")],
-        [InlineKeyboardButton("📸 📸 INSTAGRAM (ইনস্টাগ্রাম) 📸 📸", callback_data="service_instagram")]
+        [InlineKeyboardButton("🔷 🌐 FACEBOOK (ফেসবুক) 🌐 🔷", callback_data="service_facebook")],
+        [InlineKeyboardButton("🔷 📸 INSTAGRAM (ইনস্টাগ্রাম) 📸 🔷", callback_data="service_instagram")]
     ]
     await message_obj.reply_text(
         f"⚡ **SELECT YOUR PREMIUM SERVICE** ⚡\n"
@@ -94,9 +97,9 @@ async def show_services_menu(message_obj):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 🔄 ধাপ ২: রেঞ্জ মেনু প্রদর্শন
+# 🔄 রেঞ্জ মেনু প্রদর্শন
 async def show_ranges_menu(message_obj, service_name):
-    api_response = call_website_api({"action": "getnum", "service": service_name, "type": "ranges"})
+    api_response = await call_website_api_async({"action": "getnum", "service": service_name, "type": "ranges"})
     buttons = []
     
     if api_response and api_response.get("meta", {}).get("status") == "ok":
@@ -113,7 +116,7 @@ async def show_ranges_menu(message_obj, service_name):
             
     buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
     
-    service_title = "🔵 FACEBOOK" if service_name == "facebook" else "📸 INSTAGRAM"
+    service_title = "FACEBOOK" if service_name == "facebook" else "INSTAGRAM"
     
     await message_obj.reply_text(
         f"🔷 **LIVE ACTIVE RANGES FOR {service_title}** 🔷\n"
@@ -123,11 +126,11 @@ async def show_ranges_menu(message_obj, service_name):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# 📩 ওটিপি রিসিভ করার লুপ
+# 📩 ওটিপি রিসিভ করার লুপ (সম্পূর্ণ ব্যাকগ্রাউন্ড টাস্ক)
 async def check_otp_loop(context: CallbackContext, chat_id, number_id, original_msg_id, number_str, c_flag, c_name):
     for _ in range(30): 
-        await asyncio.sleep(10)
-        api_response = call_website_api({"action": "getotp", "id": number_id})
+        await asyncio.sleep(7) # প্রতি ৭ সেকেন্ড পর পর ব্যাকগ্রাউন্ডে চেক করবে
+        api_response = await call_website_api_async({"action": "getotp", "id": number_id})
         
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
@@ -183,7 +186,7 @@ async def handle_callback(update: Update, context: CallbackContext):
         selected_range = parts[2]
         
         status_msg = await query.message.reply_text("⏳ **Connecting to Server... Fetching Real Number...**")
-        api_response = call_website_api({"action": "getnum", "service": service_name, "range": selected_range})
+        api_response = await call_website_api_async({"action": "getnum", "service": service_name, "range": selected_range})
         await status_msg.delete()
         
         if api_response and api_response.get("meta", {}).get("status") == "ok":
@@ -227,10 +230,10 @@ async def handle_message(update: Update, context: CallbackContext):
         return
     text = update.message.text
 
-    if text == "🔥 [ GET NUMBER ] 🔥":
+    if text == "🔥 ━━━━ [ GET NUMBER ] ━━━━ 🔥":
         await show_services_menu(update.message)
         
-    elif text == "🔑 [ 2FA CODE ] 🔑":
+    elif text == "🔑 ━━━━ [ 2FA CODE ] ━━━━ 🔑":
         await update.message.reply_text(
             "🔑 **SECURE 2FA CODE DECRYPTER**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
