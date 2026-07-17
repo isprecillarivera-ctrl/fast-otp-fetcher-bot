@@ -2,30 +2,37 @@ import logging
 import re
 import os
 import requests
-import pyotp  # 🔐 Live 2FA Code Generator
+import pyotp  # 🔐 Live 2FA Generator
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, MessageHandler, filters, CallbackContext, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode
 from dotenv import load_dotenv
 
+# এনভায়রনমেন্ট ভ্যারিয়েবল লোড
 load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
-YOUR_CHAT_ID = int(os.getenv("YOUR_CHAT_ID"))
+YOUR_CHAT_ID = os.getenv("YOUR_CHAT_ID")
 API_KEY = os.getenv("SMS_API_KEY")
+
+# চ্যাট আইডি সেফলি ইন্টিজারে রূপান্তর
+try:
+    YOUR_CHAT_ID = int(YOUR_CHAT_ID) if YOUR_CHAT_ID else 0
+except ValueError:
+    YOUR_CHAT_ID = 0
 
 OTP_PATTERN = re.compile(r'\b(\d{4,8})\b')
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# 🛠️ প্রফেশনাল মেইন কিবোর্ড (আইকন সহ)
+# 🛠️ প্রফেশনাল মেইন কিবোর্ড
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🎲 GET NUMBER"), KeyboardButton("🔐 2FA GENERATOR")],
     [KeyboardButton("👤 MY ACCOUNT"), KeyboardButton("ℹ️ HELP CENTER")]
 ], resize_keyboard=True, is_persistent=True)
 
-# 🌍 ওরিজিনাল লোগো কালার স্টাইলের ইনলাইন কিবোর্ড (🔵 = Facebook Official, 🟠 = Instagram)
+# 🌍 অরিজিনাল ব্র্যান্ড লোগো স্টাইলের ইনলাইন কিবোর্ড
 num_keyboard = InlineKeyboardMarkup([
     [InlineKeyboardButton("🔵 Facebook Premium", callback_data="num_fb")],
     [InlineKeyboardButton("🟠 Instagram Premium", callback_data="num_ig")],
@@ -37,7 +44,7 @@ def get_country_info(number):
     if not number:
         return "Unknown Country 🌐"
     
-    clean_num = re.sub(r'\D', '', number)
+    clean_num = re.sub(r'\D', '', str(number))
     
     country_map = {
         "7": "Russia/Kazakhstan 🇷🇺/🇰🇿",
@@ -74,9 +81,11 @@ async def get_number(service):
         return None, str(e)
 
 async def start(update: Update, context: CallbackContext):
+    if not update.message:
+        return
     context.user_data['waiting_for_2fa'] = False
     await update.message.reply_text(
-        "🔥 **WELCOME TO SUPER FIRE OTP BOT v3.0** 🔥\n"
+        "🔥 **WELCOME TO SUPER FIRE OTP BOT v3.5** 🔥\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🟢 **Status:** Operational & High Speed\n"
         "💰 **Balance:** 0.0 BDT\n"
@@ -88,6 +97,8 @@ async def start(update: Update, context: CallbackContext):
 
 async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
+    if not query:
+        return
     await query.answer()
     data = query.data
 
@@ -131,10 +142,12 @@ async def handle_callback(update: Update, context: CallbackContext):
         await query.message.edit_text("🏠 **Main Menu Restored**", reply_markup=main_keyboard)
 
 async def handle_message(update: Update, context: CallbackContext):
+    if not update.message or not update.message.text:
+        return
+        
     text = update.message.text
     user_data = context.user_data
 
-    # নিশ্চিত করা যাতে ইউজার ডাটা ডিকশনারি ঠিক থাকে
     if 'waiting_for_2fa' not in user_data:
         user_data['waiting_for_2fa'] = False
 
@@ -147,7 +160,7 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text(
             "🔐 **2FA LIVE CODE GENERATOR**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📥 আপনার অ্যাকাউন্টের **2FA Secret Key**টি (যেমন: `JBSWY3DPEHPK3PXP`) এখানে মেসেজ করুন।\n\n"
+            "📥 আপনার অ্যাকাউন্টের **2FA Secret Key**টি এখানে মেসেজ করুন।\n\n"
             "⚡ বট সাথে সাথে আপনাকে লাইভ ৬-ডিজিটের কোড বের করে দেবে।", 
             reply_markup=main_keyboard,
             parse_mode=ParseMode.MARKDOWN
@@ -161,7 +174,7 @@ async def handle_message(update: Update, context: CallbackContext):
             f"👤 **PREMIUM USER PROFILE**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🆔 **User ID:** `{update.effective_user.id}`\n"
-            f"HN **Username:** {username}\n"
+            f"📛 **Username:** {username}\n"
             f"💰 **Available Balance:** 0.0 BDT\n"
             f"🛡️ **Account Status:** Active ✅\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -175,7 +188,7 @@ async def handle_message(update: Update, context: CallbackContext):
             "🚀 **How to get Dynamic Number:**\n"
             "1. Click **🎲 GET NUMBER**.\n"
             "2. Select Facebook 🔵 or Instagram 🟠.\n"
-            "3. Copy the number & request OTP from the official app.\n\n"
+            "3. Copy the number & request OTP.\n\n"
             "🔐 **How to generate 2FA Code:**\n"
             "1. Click **🔐 2FA GENERATOR**.\n"
             "2. Send your 2FA Secret Key directly into the chat.",
@@ -195,8 +208,7 @@ async def handle_message(update: Update, context: CallbackContext):
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🔑 **Live Code:** `{live_code}`\n"
                 f"⏳ **Valid For:** {int(time_remaining)} seconds\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💡 *টিপ: কোডটি ৩০ সেকেন্ড পর পর স্বয়ংক্রিয়ভাবে পরিবর্তিত হয়।*",
+                f"━━━━━━━━━━━━━━━━━━━━━━━━",
                 parse_mode=ParseMode.MARKDOWN
             )
         except Exception:
@@ -205,24 +217,30 @@ async def handle_message(update: Update, context: CallbackContext):
 
     # 🎯 OTP স্বয়ংক্রিয়ভাবে ডিটেক্ট করার লজিক
     otps = OTP_PATTERN.findall(text)
-    if otps:
+    if otps and YOUR_CHAT_ID:
         for otp in otps:
-            await context.bot.send_message(
-                YOUR_CHAT_ID, 
-                f"🔥 **NEW LIVE OTP RECEIVED!**\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔑 **OTP CODE:** `{otp}`\n"
-                f"⏰ **Timestamp:** {datetime.now().strftime('%H:%M:%S')}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━", 
-                parse_mode=ParseMode.MARKDOWN
-            )
+            try:
+                await context.bot.send_message(
+                    YOUR_CHAT_ID, 
+                    f"🔥 **NEW LIVE OTP RECEIVED!**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🔑 **OTP CODE:** `{otp}`\n"
+                    f"⏰ **Timestamp:** {datetime.now().strftime('%H:%M:%S')}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━", 
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                logging.error(f"Failed to send OTP to YOUR_CHAT_ID: {e}")
 
 def main():
+    if not TOKEN:
+        print("❌ ERROR: BOT_TOKEN is missing in Environment Variables!")
+        return
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("🚀 BOT ACTIVE - All bugs fixed successfully!")
+    print("🚀 BOT DEPLOYED SUCCESSFUL - All clear!")
     app.run_polling()
 
 if __name__ == '__main__':
