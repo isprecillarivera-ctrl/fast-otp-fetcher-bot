@@ -15,17 +15,14 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার অফিসিয়াল দুটি চ্যানেল/গ্রুপ ইউজারনেম
 CHANNEL_1 = "@SUPERFIREUPDATE"
 CHANNEL_2 = "@SUPERFIREOTP"
 
-# প্রিমিয়াম প্রধান কীবোর্ড লেআউট
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# বাধ্যতামূলক জয়েন করার ইনলাইন কীবোর্ড
 def get_join_keyboard():
     buttons = [
         [InlineKeyboardButton("📢 Join Update Channel", url=f"https://t.me/{CHANNEL_1.replace('@', '')}")],
@@ -34,49 +31,25 @@ def get_join_keyboard():
     ]
     return InlineKeyboardMarkup(buttons)
 
-# মেম্বারশিপ চেক করার উন্নত ও নিরাপদ লজিক
 async def is_user_subscribed(context: CallbackContext, user_id: int) -> bool:
     try:
-        # ১ম গ্রুপ/চ্যানেল চেক
         member1 = await context.bot.get_chat_member(chat_id=CHANNEL_1, user_id=user_id)
         if member1.status in ['left', 'kicked']:
             return False
-            
-        # ২য় গ্রুপ/চ্যানেল চেক
         member2 = await context.bot.get_chat_member(chat_id=CHANNEL_2, user_id=user_id)
         if member2.status in ['left', 'kicked']:
             return False
-            
         return True
     except Exception as e:
         logging.error(f"Membership verification error: {e}")
-        # বট অ্যাডমিন না থাকলেও যাতে ইউজার আটকে না যায়, তাই True করে দেওয়া হলো
         return True
 
-def get_flag_and_name(number_str):
-    clean_num = re.sub(r'\D', '', str(number_str))
-    if not clean_num:
-        return "International", "🌍"
-      
-    country_map = {
-        "224": ("Guinea", "🇬🇳"),
-        "232": ("Sierra Leone", "🇸🇱"),
-        "261": ("Madagascar", "🇲🇬"),
-        "225": ("Ivory Coast", "🇨🇮"),
-        "236": ("Central African Rep.", "🇨🇫"),
-        "880": ("Bangladesh", "🇧🇩"),
-        "91": ("India", "🇮🇳"),
-        "380": ("Ukraine", "🇺🇦"),
-        "992": ("Tajikistan", "🇹🇯"),
-        "251": ("Ethiopia", "🇪🇹"),
-        "229": ("Benin", "🇧🇯")
-    }
-    
-    for prefix, info in country_map.items():
-        if clean_num.startswith(prefix):
-            return info[0], info[1]
-            
-    return f"Country (+{clean_num[:3]})", "🌍"
+# সুনির্দিষ্ট ৩টি দেশের কোড ম্যাপিং
+COUNTRY_MAP = {
+    "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
+    "224": {"name": "Guinea", "flag": "🇬🇳"},
+    "225": {"name": "Ivory Coast", "c_code": "🇨🇮"}
+}
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -91,7 +64,6 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 r = await client.get(url, headers=headers, timeout=15.0)
             else:
                 r = await client.post(url, json=payload, headers=headers, timeout=15.0)
-                
             if r.status_code == 200:
                 return r.json()
     except Exception as e:
@@ -100,12 +72,10 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
 
 async def start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    
-    # প্রথমবার চেক করা হচ্ছে
     if not await is_user_subscribed(context, user_id):
         await update.message.reply_text(
             f"⚠️ **Please join our channels to use the bot!**\n\n"
-            f"আমাদের পরিষেবাগুলি ব্যবহার করতে প্রথমে নিচের দুটি গ্রুপ/চ্যানেলে জয়েন করুন এবং ভেরিফাই বাটনে ক্লিক করুন।",
+            f"আমাদেরサービス ব্যবহার করতে নিচের দুটি গ্রুপে জয়েন করে ভেরিফাই বাটনে ক্লিক করুন।",
             reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -134,9 +104,7 @@ async def show_services_menu(message_obj):
 async def show_ranges_menu(message_obj, service_name):
     api_response = await call_website_api_async("liveaccess", method="GET")
     buttons = []
-    
     api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
-    ALLOWED_COUNTRY_PREFIXES = ["232", "224", "225"]
       
     if api_response and (api_response.get("status") == "ok" or "services" in api_response):
         services_list = api_response.get("services", [])
@@ -144,19 +112,27 @@ async def show_ranges_menu(message_obj, service_name):
         for service in services_list:
             if str(service.get("sid")).lower() == service_name.lower():
                 ranges_list = service.get("ranges", [])
+                
+                # ডুপ্লিকেট বাটন এড়াতে ইউনিক দেশ ফিল্টারিং লজিক
+                seen_countries = set()
                 for r in ranges_list:
                     clean_r = re.sub(r'\D', '', str(r))
-                    if any(clean_r.startswith(prefix) for prefix in ALLOWED_COUNTRY_PREFIXES):
-                        c_name, c_flag = get_flag_and_name(clean_r)
-                        buttons.append([InlineKeyboardButton(f"✨ {c_flag} {c_name} ({r}) ✨", callback_data=f"range_{service_name}_{r}")])
+                    
+                    # প্রিফিক্স ম্যাচিং (২২৪, ২৩২, ২২৫)
+                    prefix = clean_r[:3]
+                    if prefix in COUNTRY_MAP and prefix not in seen_countries:
+                        seen_countries.add(prefix)
+                        c_info = COUNTRY_MAP[prefix]
+                        # বাটনে ক্লিক করলে ওই দেশের মেইন রেঞ্জ পাস হবে
+                        buttons.append([InlineKeyboardButton(f"✨ {c_info.get('flag','🇨🇮') if 'flag' in c_info else '🇨🇮'} {c_info['name']} ✨", callback_data=f"range_{service_name}_{r}")])
                 break
       
     buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
 
     await message_obj.reply_text(
-        f"🔥 **𝖫𝖨𝖵𝖤 𝖠𝖢𝖳𝖨𝖵𝖤 𝖱𝖠𝖭𝖦𝖤𝖲 [{api_service_name.upper()}]**\n"
+        f"🔥 **𝖫𝖨𝖵𝖤 𝖠𝖢𝖳𝖨𝖵𝖤 𝖲𝖤𝖱𝖵𝖤𝖱𝖲 [{api_service_name.upper()}]**\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"⚡ _Select your dynamic country server to fetch numbers:_ ", 
+        f"⚡ _Select your country to fetch number instantly:_ ", 
         reply_markup=InlineKeyboardMarkup(buttons), 
         parse_mode=ParseMode.MARKDOWN
     )
@@ -170,11 +146,11 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
             if otp_code:
                 await context.bot.edit_message_text(
                     chat_id=chat_id, message_id=original_msg_id,
-                    text=f"👑 **𝖮𝖳𝖯 𝖱𝖤𝖢𝖤𝖨𝖵𝖤𝖣 𝖲𝖴𝖢𝖢𝖤𝖲𝖲𝖥𝖴𝖫𝖫𝖸** 👑\n"
+                    text=f"👑 **𝖲𝖴𝖢𝖢𝖤𝖲𝖲! 𝖮𝖳𝖯 𝖱𝖤𝖢𝖤𝖨𝖵𝖤𝖣** 👑\n"
                          f"━━━━━━━━━━━━━━━━━━━━\n\n"
                          f"🔑 **YOUR CODE:** `{otp_code}`\n\n"
                          f"━━━━━━━━━━━━━━━━━━━━\n"
-                         f"💡 _নাম্বার বা কোডের ওপর আলতো ট্যাপ করলেই ইনস্ট্যান্ট কপি হয়ে যাবে।_",
+                         f"💡 _কোডের ওপর আলতো ট্যাপ করলেই ইনস্ট্যান্ট কপি হয়ে যাবে।_",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
@@ -183,7 +159,7 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
         chat_id=chat_id, message_id=original_msg_id, 
         text=f"❌ **𝖮𝖳𝖯 𝖳𝖨𝖬𝖤𝖮𝖴𝖳**\n"
              f"━━━━━━━━━━━━━━━━━━━━\n"
-             f"No response received from the app server. Please drop this number and generate a new one.", 
+             f"No response received. Please drop this number and try a new one.", 
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -192,9 +168,7 @@ async def handle_callback(update: Update, context: CallbackContext):
     data = query.data
     user_id = query.from_user.id
     
-    # ভেরিফাই বাটনে ক্লিক করলে যা হবে
     if data == "check_membership":
-        # মেম্বার হলে বা চেক করার ক্ষমতা না থাকলে সরাসরি এক্সেস দিয়ে দেওয়া হবে
         await query.answer("✅ Verification Successful! Access Granted.", show_alert=True)
         try:
             await query.message.delete()
@@ -232,9 +206,9 @@ async def handle_callback(update: Update, context: CallbackContext):
                 f"🚀 **𝖭𝖴𝖬𝖡𝖤𝖱 𝖠𝖫𝖫𝖮𝖢𝖠𝖳𝖤𝖣** 🚀\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"📱 **PHONE:** `+{clean_num}`\n"
-                f"⏳ **STATUS:** Waiting for incoming dynamic OTP...\n\n"
+                f"⏳ **STATUS:** Waiting for incoming live OTP...\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"💡 _নাম্বার বা কোডের ওপর আলতো ট্যাপ করলেই ইনস্ট্যান্ট কপি হয়ে যাবে।_",
+                f"💡 _নাম্বারের ওপর আলতো ট্যাপ করলেই ইনস্ট্যান্ট কপি হয়ে যাবে।_",
                 parse_mode=ParseMode.MARKDOWN
             )
 
@@ -259,7 +233,7 @@ async def handle_text_buttons(update: Update, context: CallbackContext):
         )
     elif "LIVE OTP SECTION" in text:
         await update.message.reply_text(
-            f"📡 **𝖫𝖨𝖵𝖤 𝖮𝖳𝖯 𝖲𝖳𝖠𝖳𝖴𝖲 𝖣𝖠𝖲𝖧𝖡𝖮𝖠𝖱裝**\n"
+            f"📡 **𝖫𝖨𝖵𝖤 𝖮𝖳𝖯 𝖲𝖳𝖠𝖳𝖴𝖲 𝖣𝖠𝖲𝖧𝖡𝖮𝖠𝖱𝖣**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🟢 **System Status:** Fully Operational\n"
             f"⚡ **Server Speed:** `0.4s` (Ultra Fast)\n"
