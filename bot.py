@@ -79,7 +79,7 @@ async def handle_callback(update, context):
             c = get_country_details(num)
             btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
             await status_msg.edit_text(f"🚀 **NUMBER ALLOCATED**\n\n📍 COUNTRY: {c['flag']} {c['name']}\n📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n⏳ STATUS: Waiting for OTP...", reply_markup=InlineKeyboardMarkup(btn), parse_mode=ParseMode.MARKDOWN)
-            active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, res["data"]["id"], status_msg.message_id, num))
+            active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, res["data"]["id"], num))
         else: await status_msg.edit_text("❌ Server Busy!")
     elif query.data == "back_to_services":
         await query.message.delete()
@@ -88,19 +88,19 @@ async def handle_callback(update, context):
         await query.message.delete()
         await show_ranges(query.message, query.data.split("_")[1])
 
-async def check_otp(context, chat_id, number_id, msg_id, number):
+async def check_otp(context, chat_id, number_id, number):
     for _ in range(40):
-        await asyncio.sleep(5)
+        await asyncio.sleep(3)
         res = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
-        # আপডেট করা ওটিপি লজিক:
         otp = None
         if res:
             otp = res.get("otp") or res.get("data", {}).get("otp") or res.get("meta", {}).get("otp")
             
         if otp:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
+            # সরাসরি ইউজারের চ্যাটে নতুন মেসেজ হিসেবে ওটিপি পাঠানো হচ্ছে
+            await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
             return
-    await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text="❌ TIMEOUT")
+    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`.")
 
 async def show_services(msg):
     kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")], [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]]
@@ -110,8 +110,9 @@ async def show_ranges(msg, service):
     res = await call_website_api_async("liveaccess", method="GET")
     kb = []
     seen = set()
+    target_service = service.lower()
     for s in res.get("services", []):
-        if s["sid"].lower() == service.lower():
+        if target_service in s["sid"].lower() or (target_service == "instagram" and "ig" in s["sid"].lower()):
             for r in s["ranges"]:
                 p = re.sub(r'\D', '', str(r))[:3]
                 if p in COUNTRY_MAP and p not in seen:
