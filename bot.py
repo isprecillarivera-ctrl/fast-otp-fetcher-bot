@@ -22,40 +22,23 @@ main_keyboard = ReplyKeyboardMarkup([
 ], resize_keyboard=True)
 
 async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text(
-        "✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n\nনিচ থেকে আপনার প্রয়োজনীয় অপশনটি সিলেক্ট করুন।", 
-        reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
-    )
-
-async def check_otp_loop(context, chat_id, number_id, original_msg_id, number_str, service):
-    for _ in range(30):
-        await asyncio.sleep(7)
-        async with httpx.AsyncClient() as client:
-            res = await client.post("https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum", json={"action": "getotp", "id": number_id}, headers={"X-API-Key": API_KEY})
-            if res.status_code == 200:
-                otp = res.json().get("data", {}).get("otp")
-                if otp:
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=original_msg_id, text=f"✅ **OTP:** `{otp}`")
-                    await context.bot.send_message(chat_id=GROUP_ID, text=f"🚀 **New OTP Received!**\n📱 Number: `+{number_str}`\n🔑 OTP: `{otp}`", parse_mode=ParseMode.MARKDOWN)
-                    return
-    await context.bot.edit_message_text(chat_id=chat_id, message_id=original_msg_id, text="❌ **Timeout! কোনো ওটিপি পাওয়া যায়নি।**")
+    await update.message.reply_text("✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n\nনিচ থেকে অপশন সিলেক্ট করুন।", reply_markup=main_keyboard)
 
 async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text
     if "GET NUMBER" in text:
         buttons = [
             [InlineKeyboardButton("🔵 FACEBOOK 🔵", callback_data="service_facebook")],
-            [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")],
-            [InlineKeyboardButton("🐦 TWITTER 🐦", callback_data="service_twitter")],
-            [InlineKeyboardButton("💬 WHATSAPP 💬", callback_data="service_whatsapp")]
+            [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]
         ]
-        await update.message.reply_text("👇 *সার্ভিস সিলেক্ট করুন:*", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("👇 সার্ভিস সিলেক্ট করুন:", reply_markup=InlineKeyboardMarkup(buttons))
     
     elif "LIVE OTP" in text:
-        await update.message.reply_text("📢 **লাইভ ওটিপি চ্যানেলে জয়েন করুন:**\nhttps://t.me/SUPERFIREOTP", parse_mode=ParseMode.MARKDOWN)
+        # সরাসরি আপনার গ্রুপের লিংক অথবা টেক্সট
+        await update.message.reply_text(f"📢 লাইভ ওটিপি আপডেট দেখতে আমাদের গ্রুপে থাকুন: https://t.me/SUPERFIREOTP")
         
     elif "2FA OPTION" in text:
-        await update.message.reply_text("🔒 **টু-ফ্যাক্টর অপশন:**\nএখানে আপনি টু-ফ্যাক্টর বাইপাস বা রিকভারি সম্পর্কিত সেবা পাবেন।", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("🔒 **2FA:** আপনি আমাদের এপিআই ব্যবহার করে ওটিপি পাওয়ার পর এখানে টু-ফ্যাক্টর কোড জেনারেট করতে পারবেন।")
 
 async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -70,10 +53,19 @@ async def handle_callback(update: Update, context: CallbackContext):
     nid = data.get("id")
     
     if num:
-        msg = await query.message.reply_text(f"📱 নম্বর: `{num}`\n⏳ ওটিপির জন্য অপেক্ষা করুন...", parse_mode=ParseMode.MARKDOWN)
-        asyncio.create_task(check_otp_loop(context, query.message.chat_id, nid, msg.message_id, num, service))
-    else:
-        await query.message.reply_text("❌ সার্ভিস থেকে নম্বর পাওয়া যাচ্ছে না।")
+        msg = await query.message.reply_text(f"📱 নম্বর: `{num}`\n⏳ ওটিপির জন্য অপেক্ষা করুন...")
+        # ওটিপি লুপ
+        for _ in range(30):
+            await asyncio.sleep(7)
+            async with httpx.AsyncClient() as c:
+                r = await c.post("https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum", json={"action": "getotp", "id": nid}, headers={"X-API-Key": API_KEY})
+                otp = r.json().get("data", {}).get("otp")
+                if otp:
+                    await context.bot.edit_message_text(chat_id=query.message.chat_id, message_id=msg.message_id, text=f"✅ ওটিপি: `{otp}`")
+                    # সরাসরি গ্রুপে পাঠানো
+                    await context.bot.send_message(chat_id=GROUP_ID, text=f"🚀 নতুন ওটিপি:\n📱 নম্বর: {num}\n🔑 কোড: {otp}")
+                    return
+        await context.bot.edit_message_text(chat_id=query.message.chat_id, message_id=msg.message_id, text="❌ সময় শেষ!")
 
 def main():
     app = Application.builder().token(TOKEN).build()
