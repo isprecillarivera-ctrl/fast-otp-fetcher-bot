@@ -15,11 +15,43 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# মেসেজ বক্সের নিচের ৩টি বাটনকে স্টাইলিশ প্রিমিয়াম ইমোজি দিয়ে আকর্ষণীয় করা হয়েছে
+# আপনার দেওয়া দুটি অফিসিয়াল চ্যানেল ইউজারনেম
+CHANNEL_1 = "@SUPERFIREUPDATE"
+CHANNEL_2 = "@SUPERFIREOTP"
+
+# প্রধান কীবোর্ড লেআউট
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
+
+# চ্যানেল চেক করার জন্য ইনলাইন কীবোর্ড জেনারেটর (স্ক্রিনশটের মতো ডিজাইন)
+def get_join_keyboard():
+    buttons = [
+        [InlineKeyboardButton("📢 Join Update Channel", url=f"https://t.me/{CHANNEL_1.replace('@', '')}")],
+        [InlineKeyboardButton("📢 Join OTP Channel", url=f"https://t.me/{CHANNEL_2.replace('@', '')}")],
+        [InlineKeyboardButton("✅ Check Joined / Verify", callback_data="check_membership")]
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+# ইউজার চ্যানেলে জয়েন আছে কিনা তা চেক করার মূল ফাংশন
+async def is_user_subscribed(context: CallbackContext, user_id: int) -> bool:
+    try:
+        # ১ম চ্যানেল চেক
+        member1 = await context.bot.get_chat_member(chat_id=CHANNEL_1, user_id=user_id)
+        if member1.status in ['left', 'kicked']:
+            return False
+            
+        # ২য় চ্যানেল চেক
+        member2 = await context.bot.get_chat_member(chat_id=CHANNEL_2, user_id=user_id)
+        if member2.status in ['left', 'kicked']:
+            return False
+            
+        return True
+    except Exception as e:
+        logging.error(f"Membership check error: {e}")
+        # যদি বট চ্যানেলে অ্যাডমিন না থাকে তবে এরর এড়াতে True রিটার্ন করবে
+        return True
 
 def get_flag_and_name(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
@@ -67,6 +99,17 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
     return None
 
 async def start(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    
+    # প্রথমে জয়েন চেক করা হচ্ছে
+    if not await is_user_subscribed(context, user_id):
+        await update.message.reply_text(
+            f"⚠️ **Please join our channels to use the bot!**\n\n"
+            f"আমাদের পরিষেবাগুলি ব্যবহার করতে প্রথমে নিচের দুটি চ্যানেলে জয়েন করুন এবং ভেরিফাই বাটনে ক্লিক করুন।",
+            reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     await update.message.reply_text(
         f"👑 **𝖲𝖴𝖯𝖤𝖱 𝖥𝖨𝖱𝖤 𝖮𝖳𝖯 𝖤𝖭𝖦𝖨𝖭𝖤** 👑\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -147,6 +190,29 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
 async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     data = query.data
+    user_id = query.from_user.id
+    
+    # ভেরিফিকেশন বাটন হ্যান্ডেল করা
+    if data == "check_membership":
+        if await is_user_subscribed(context, user_id):
+            await query.answer("✅ Verification Successful! Access Granted.", show_alert=True)
+            await query.message.delete()
+            await query.message.reply_text(
+                f"👑 **𝖲𝖴𝖯𝖤𝖱 𝖥𝖨𝖱𝖤 𝖮𝖳𝖯 𝖤𝖭𝖦𝖨𝖭𝖤** 👑\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🥳 আপনাকে স্বাগতম! আপনার ভেরিফিকেশন সফল হয়েছে।\n\n"
+                f"👇 *Select an option from the menu below to start:*",
+                reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await query.answer("❌ You haven't joined both channels yet! Please join first.", show_alert=True)
+        return
+
+    # বাকি বাটনগুলোর জন্য চেক করা হবে (ইউজার মাঝখান থেকে লিভ নিলে কাজ করা বন্ধ করবে)
+    if not await is_user_subscribed(context, user_id):
+        await query.answer("⚠️ Access Denied! You are not in the channels.", show_alert=True)
+        return
+
     await query.answer()
 
     if data == "back_to_services":
@@ -184,6 +250,17 @@ async def handle_callback(update: Update, context: CallbackContext):
 
 async def handle_text_buttons(update: Update, context: CallbackContext):
     text = update.message.text
+    user_id = update.effective_user.id
+    
+    # টেক্সট বাটনেও প্রথমে জয়েন চেক করা হবে
+    if not await is_user_subscribed(context, user_id):
+        await update.message.reply_text(
+            f"⚠️ **Please join our channels to use the bot!**\n\n"
+            f"পরিষেবাটি ব্যবহার করতে প্রথমে নিচের চ্যানেলে জয়েন করুন।",
+            reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     if "GET NUMBER" in text:
         await show_services_menu(update.message)
     elif "2FA CODE" in text:
