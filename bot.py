@@ -15,29 +15,29 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার অপশনগুলো ঠিক রেখে নিচের কীবোর্ড বাটনগুলো বড় ও সুন্দর করা হয়েছে
+# ইমোজি ছাড়া একদম ক্লিন এবং বড় কীবোর্ড বাটন
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🎲 GET NUMBER")],
-    [KeyboardButton("🔑 2FA CODE")]
+    [KeyboardButton("GET NUMBER")],
+    [KeyboardButton("2FA CODE")]
 ], resize_keyboard=True, is_persistent=True)
 
 def get_flag_and_name(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
     if not clean_num:
-        return "International", "🌍"
+        return "International"
       
     country_map = {
-        "261": ("Madagascar", "🇲🇬"), "224": ("Guinea", "🇬🇳"),
-        "232": ("Sierra Leone", "🇸🇱"), "236": ("Central African Rep.", "🇨🇫"),
-        "880": ("Bangladesh", "🇧🇩"), "91": ("India", "🇮🇳"),
-        "62": ("Indonesia", "🇮🇩"), "63": ("Philippines", "🇵🇭"),
-        "84": ("Vietnam", "🇻🇳"), "225": ("Ivory Coast", "🇨🇮"),
-        "380": ("Ukraine", "🇺🇦")
+        "261": "Madagascar", "224": "Guinea",
+        "232": "Sierra Leone", "236": "Central African Rep.",
+        "880": "Bangladesh", "91": "India",
+        "62": "Indonesia", "63": "Philippines",
+        "84": "Vietnam", "225": "Ivory Coast",
+        "380": "Ukraine"
     }
-    for prefix, info in country_map.items():
+    for prefix, name in country_map.items():
         if clean_num.startswith(prefix):
-            return info
-    return (f"Country (+{clean_num[:3]})", "🌍")
+            return name
+    return f"Country (+{clean_num[:3]})"
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -61,18 +61,18 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
-        f"✨ **Welcome to Fast OTP Fetcher Bot!** ✨\n\n"
-        f"🤖 *Select an option from the menu below:*",
+        f"Welcome to Fast OTP Fetcher Bot!\n\n"
+        f"Select an option from the menu below:",
         reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
     )
 
 async def show_services_menu(message_obj):
-    # বাটনগুলো এক লাইনে একটি করে (Full-width) বড় করা হয়েছে
+    # অপ্রয়োজনীয় ইমোজি ছাড়া ক্লিন বড় বাটন
     buttons = [
-        [InlineKeyboardButton("🔷 🌐 FACEBOOK 🌐 🔷", callback_data="service_facebook")],
-        [InlineKeyboardButton("🔷 📸 INSTAGRAM 📸 🔷", callback_data="service_instagram")]
+        [InlineKeyboardButton("FACEBOOK", callback_data="service_facebook")],
+        [InlineKeyboardButton("INSTAGRAM", callback_data="service_instagram")]
     ]
-    await message_obj.reply_text("👇 *Select your service:*", reply_markup=InlineKeyboardMarkup(buttons))
+    await message_obj.reply_text("Select your service:", reply_markup=InlineKeyboardMarkup(buttons))
 
 async def show_ranges_menu(message_obj, service_name):
     api_response = await call_website_api_async("liveaccess", method="GET")
@@ -86,21 +86,20 @@ async def show_ranges_menu(message_obj, service_name):
             if service.get("sid") == api_service_name:
                 ranges_list = service.get("ranges", [])
                 for r in ranges_list:
-                    c_name, c_flag = get_flag_and_name(r)
-                    # প্রতিটি রেঞ্জ বাটন এক একটি আলাদা লাইনে থাকবে (স্ক্রিনশটের মতো বড় দেখাতে)
-                    buttons.append([InlineKeyboardButton(f"{c_flag} {c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
+                    c_name = get_flag_and_name(r)
+                    # ইমোজি ছাড়া ক্লিন ফুল-উইডথ বাটন
+                    buttons.append([InlineKeyboardButton(f"{c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
                 break
       
-    # ব্যাক বাটনে স্ক্রিনশটের মতো আকর্ষণীয় ইমোজি ব্যবহার করা হয়েছে
-    buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
+    buttons.append([InlineKeyboardButton("Back to Services", callback_data="back_to_services")])
 
     await message_obj.reply_text(
-        f"🔥 **Live Ranges for {api_service_name}:**", 
+        f"Live Ranges for {api_service_name}:", 
         reply_markup=InlineKeyboardMarkup(buttons), 
         parse_mode=ParseMode.MARKDOWN
     )
 
-async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number, c_flag, c_name, service_name):
+async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number, service_name):
     for _ in range(30):   
         await asyncio.sleep(7)   
         api_response = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": number_id})
@@ -109,14 +108,14 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
             if otp_code:
                 await context.bot.edit_message_text(
                     chat_id=chat_id, message_id=original_msg_id,
-                    text=f"🟢 **OTP RECEIVED** 🟢\n\n⚡⚡ `{otp_code}` ⚡⚡\n\n*(কপি করতে ওপরের নাম্বারে ট্যাপ করুন)*",
+                    text=f"OTP RECEIVED\n\n{otp_code}\n\n(Tap number to copy)",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
 
     await context.bot.edit_message_text(
         chat_id=chat_id, message_id=original_msg_id, 
-        text="❌ *OTP Timeout! Try another number.*", 
+        text="OTP Timeout! Try another number.", 
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -140,17 +139,16 @@ async def handle_callback(update: Update, context: CallbackContext):
             num_data = api_response.get("data", {})
             num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
-            c_name, c_flag = get_flag_and_name(clean_num)
               
             sent_msg = await query.message.edit_text(
-                f"📱 *Number:* `+{clean_num}`\n⏱️ *Waiting for OTP...*",
+                f"Number: +{clean_num}\nWaiting for OTP...",
                 parse_mode=ParseMode.MARKDOWN
             )
 
             asyncio.create_task(
                 check_otp_loop(
                     context, query.message.chat_id, num_data.get("id"), 
-                    sent_msg.message_id, clean_num, c_flag, c_name, parts[1]
+                    sent_msg.message_id, clean_num, parts[1]
                 )
             )
 
