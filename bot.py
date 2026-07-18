@@ -15,12 +15,13 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার লেআউট অনুযায়ী মেসেজ বক্সের নিচের কীবোর্ড
+# প্রধান কীবোর্ড লেআউট
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("GET NUMBER")],
     [KeyboardButton("2FA CODE"), KeyboardButton("LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
+# দেশের নাম ও ফ্ল্যাগ ম্যাপ
 def get_flag_and_name(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
     if not clean_num:
@@ -85,8 +86,11 @@ async def show_ranges_menu(message_obj, service_name):
     api_response = await call_website_api_async("liveaccess", method="GET")
     buttons = []
     
-    # কোডের ছোট হাতের সার্ভিস নামকে এপিআই-এর সঠিক ফরমেটে রূপান্তর
     api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
+    
+    # যে ৩টি দেশ আপনি দেখাতে চান তাদের প্রিফিক্স কোড এখানে ডিফাইন করা হয়েছে
+    # ২৩২ = Sierra Leone, ২২৪ = Guinea, ২২৫ = Ivory Coast
+    ALLOWED_COUNTRY_PREFIXES = ["232", "224", "225"]
       
     if api_response and (api_response.get("status") == "ok" or "services" in api_response):
         services_list = api_response.get("services", [])
@@ -95,8 +99,12 @@ async def show_ranges_menu(message_obj, service_name):
             if str(service.get("sid")).lower() == service_name.lower():
                 ranges_list = service.get("ranges", [])
                 for r in ranges_list:
-                    c_name, c_flag = get_flag_and_name(r)
-                    buttons.append([InlineKeyboardButton(f"{c_flag} {c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
+                    clean_r = re.sub(r'\D', '', str(r))
+                    
+                    # শুধুমাত্র ৩টি অনুমোদিত দেশের লাইভ রেঞ্জ ফিল্টার করা হচ্ছে
+                    if any(clean_r.startswith(prefix) for prefix in ALLOWED_COUNTRY_PREFIXES):
+                        c_name, c_flag = get_flag_and_name(clean_r)
+                        buttons.append([InlineKeyboardButton(f"{c_flag} {c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
                 break
       
     buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
