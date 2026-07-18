@@ -15,7 +15,7 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার লেআউট: উপরে গেট নাম্বার পুরো এক লাইনে, আর নিচে দুই পাশে দুটি বড় বাটন পাশাপাশি
+# আপনার লেআউট অনুযায়ী মেসেজ বক্সের নিচের কীবোর্ড
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("GET NUMBER")],
     [KeyboardButton("2FA CODE"), KeyboardButton("LIVE OTP SECTION")]
@@ -84,13 +84,15 @@ async def show_services_menu(message_obj):
 async def show_ranges_menu(message_obj, service_name):
     api_response = await call_website_api_async("liveaccess", method="GET")
     buttons = []
+    
+    # কোডের ছোট হাতের সার্ভিস নামকে এপিআই-এর সঠিক ফরমেটে রূপান্তর
     api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
       
-    if api_response and api_response.get("status") == "ok":
+    if api_response and (api_response.get("status") == "ok" or "services" in api_response):
         services_list = api_response.get("services", [])
         
         for service in services_list:
-            if service.get("sid") == api_service_name:
+            if str(service.get("sid")).lower() == service_name.lower():
                 ranges_list = service.get("ranges", [])
                 for r in ranges_list:
                     c_name, c_flag = get_flag_and_name(r)
@@ -101,7 +103,7 @@ async def show_ranges_menu(message_obj, service_name):
 
     await message_obj.reply_text(
         f"🟢 **LIVE ACTIVE RANGES FOR {api_service_name.upper()}**\n"
-        f"💡 _Select your preferred dynamic country range below:_ ", 
+        f"💡 _Select your preferred dynamic country range below to get number automatically:_ ", 
         reply_markup=InlineKeyboardMarkup(buttons), 
         parse_mode=ParseMode.MARKDOWN
     )
