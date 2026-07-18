@@ -15,10 +15,10 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# প্রধান কীবোর্ড লেআউট
+# মেসেজ বক্সের নিচের ৩টি বাটনকে স্টাইলিশ প্রিমিয়াম ইমোজি দিয়ে আকর্ষণীয় করা হয়েছে
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("GET NUMBER")],
-    [KeyboardButton("2FA CODE"), KeyboardButton("LIVE OTP SECTION")]
+    [KeyboardButton("🔥 GET NUMBER 🔥")],
+    [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
 def get_flag_and_name(number_str):
@@ -76,7 +76,6 @@ async def start(update: Update, context: CallbackContext):
     )
 
 async def show_services_menu(message_obj):
-    # ইনলাইন বাটনে প্রিমিয়াম লুক দেওয়া হয়েছে
     buttons = [
         [InlineKeyboardButton("🔷 🌐 FACEBOOK 🌐 🔷", callback_data="service_facebook")],
         [InlineKeyboardButton("🔷 📸 INSTAGRAM 📸 🔷", callback_data="service_instagram")]
@@ -126,7 +125,6 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
-                # ওটিপি পাওয়ার পর একদম রাজকীয় গোল্ডেন লাক্সারি লুক
                 await context.bot.edit_message_text(
                     chat_id=chat_id, message_id=original_msg_id,
                     text=f"👑 **𝖮𝖳𝖯 𝖱𝖤𝖢𝖤𝖨𝖵𝖤𝖣 𝖲𝖴𝖢𝖢𝖤𝖲𝖲𝖥𝖴𝖫𝖫𝖸** 👑\n"
@@ -167,7 +165,6 @@ async def handle_callback(update: Update, context: CallbackContext):
             num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
               
-            # নাম্বার এলোকেটেড মেসেজকে প্রিমিয়াম করা হয়েছে
             sent_msg = await query.message.edit_text(
                 f"🚀 **𝖭𝖴𝖬𝖡𝖤𝖱 𝖠𝖫𝖫𝖮𝖢𝖠𝖳𝖤𝖣** 🚀\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -187,10 +184,9 @@ async def handle_callback(update: Update, context: CallbackContext):
 
 async def handle_text_buttons(update: Update, context: CallbackContext):
     text = update.message.text
-    if text == "GET NUMBER":
+    if "GET NUMBER" in text:
         await show_services_menu(update.message)
-    elif text == "2FA CODE":
-        # ২এফএ সেকশন প্রিমিয়াম লুক
+    elif "2FA CODE" in text:
         await update.message.reply_text(
             f"🔑 **𝟤𝖥𝖠 𝖠𝖴𝖳𝖧𝖤𝖭𝖳𝖨𝖢𝖠𝖳𝖨𝖮𝖭 𝖲𝖤𝖢𝖳𝖨𝖮𝖭**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -198,8 +194,7 @@ async def handle_text_buttons(update: Update, context: CallbackContext):
             f"⚡ _We are integrating premium high-speed 2FA servers._", 
             parse_mode=ParseMode.MARKDOWN
         )
-    elif text == "LIVE OTP SECTION":
-        # লাইভ ওটিপি ড্যাশবোর্ড প্রিমিয়াম লুক
+    elif "LIVE OTP SECTION" in text:
         await update.message.reply_text(
             f"📡 **𝖫𝖨𝖵𝖤 𝖮𝖳𝖯 𝖲𝖳𝖠𝖳𝖴𝖲 𝖣𝖠𝖲𝖧𝖡𝖮𝖠𝖱𝖣**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -207,7 +202,7 @@ async def handle_text_buttons(update: Update, context: CallbackContext):
             f"⚡ **Server Speed:** `0.4s` (Ultra Fast)\n"
             f"📶 **API Success Rate:** `99.8%`\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"👉 _আমাদের লাইভ ক্লাউড সার্ভারগুলো এখন সম্পূর্ণ সচল আছে। নতুন নাম্বার তুলতে নিচের 'GET NUMBER' বাটনে ক্লিক করুন!_", 
+            f"👉 _আমাদের লাইভ ক্লাউড সার্ভারগুলো এখন সম্পূর্ণ সচল আছে। নতুন নাম্বার তুলতে ওপরের '🔥 GET NUMBER 🔥' বাটনে ক্লিক করুন!_", 
             parse_mode=ParseMode.MARKDOWN
         )
 
