@@ -3,7 +3,7 @@ import re
 import os
 import httpx
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, MessageHandler, filters, CallbackContext, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode
 from dotenv import load_dotenv
@@ -15,17 +15,17 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার দেওয়া দুটি অফিসিয়াল চ্যানেল ইউজারনেম
+# আপনার অফিসিয়াল দুটি চ্যানেল/গ্রুপ ইউজারনেম
 CHANNEL_1 = "@SUPERFIREUPDATE"
 CHANNEL_2 = "@SUPERFIREOTP"
 
-# প্রধান কীবোর্ড লেআউট
+# প্রিমিয়াম প্রধান কীবোর্ড লেআউট
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# চ্যানেল চেক করার জন্য ইনলাইন কীবোর্ড জেনারেটর (স্ক্রিনশটের মতো ডিজাইন)
+# বাধ্যতামূলক জয়েন করার ইনলাইন কীবোর্ড
 def get_join_keyboard():
     buttons = [
         [InlineKeyboardButton("📢 Join Update Channel", url=f"https://t.me/{CHANNEL_1.replace('@', '')}")],
@@ -34,24 +34,24 @@ def get_join_keyboard():
     ]
     return InlineKeyboardMarkup(buttons)
 
-# ইউজার চ্যানেলে জয়েন আছে কিনা তা চেক করার মূল ফাংশন
+# মেম্বারশিপ চেক করার কঠোর লজিক
 async def is_user_subscribed(context: CallbackContext, user_id: int) -> bool:
     try:
-        # ১ম চ্যানেল চেক
+        # ১ম গ্রুপ/চ্যানেল চেক
         member1 = await context.bot.get_chat_member(chat_id=CHANNEL_1, user_id=user_id)
         if member1.status in ['left', 'kicked']:
             return False
             
-        # ২য় চ্যানেল চেক
+        # ২য় গ্রুপ/চ্যানেল চেক
         member2 = await context.bot.get_chat_member(chat_id=CHANNEL_2, user_id=user_id)
         if member2.status in ['left', 'kicked']:
             return False
             
         return True
     except Exception as e:
-        logging.error(f"Membership check error: {e}")
-        # যদি বট চ্যানেলে অ্যাডমিন না থাকে তবে এরর এড়াতে True রিটার্ন করবে
-        return True
+        logging.error(f"Membership verification failed: {e}")
+        # মেম্বারশিপ চেক করতে কোনো সমস্যা হলে সিকিউরিটির জন্য ব্লকড রাখা হবে
+        return False
 
 def get_flag_and_name(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
@@ -101,11 +101,11 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
 async def start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
-    # প্রথমে জয়েন চেক করা হচ্ছে
+    # ইউজার জয়েন না থাকলে নিচের কীবোর্ড সম্পূর্ণ মুছে জয়েন বাটন দেওয়া হবে
     if not await is_user_subscribed(context, user_id):
         await update.message.reply_text(
             f"⚠️ **Please join our channels to use the bot!**\n\n"
-            f"আমাদের পরিষেবাগুলি ব্যবহার করতে প্রথমে নিচের দুটি চ্যানেলে জয়েন করুন এবং ভেরিফাই বাটনে ক্লিক করুন।",
+            f"আমাদের পরিষেবাগুলি ব্যবহার করতে প্রথমে নিচের দুটি গ্রুপ/চ্যানেলে জয়েন করুন এবং ভেরিফাই বাটনে ক্লিক করুন।",
             reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -192,7 +192,6 @@ async def handle_callback(update: Update, context: CallbackContext):
     data = query.data
     user_id = query.from_user.id
     
-    # ভেরিফিকেশন বাটন হ্যান্ডেল করা
     if data == "check_membership":
         if await is_user_subscribed(context, user_id):
             await query.answer("✅ Verification Successful! Access Granted.", show_alert=True)
@@ -208,9 +207,9 @@ async def handle_callback(update: Update, context: CallbackContext):
             await query.answer("❌ You haven't joined both channels yet! Please join first.", show_alert=True)
         return
 
-    # বাকি বাটনগুলোর জন্য চেক করা হবে (ইউজার মাঝখান থেকে লিভ নিলে কাজ করা বন্ধ করবে)
+    # অন্য যেকোনো বাটনে ক্লিক করলেও মেম্বারশিপ ভেরিফাই করা হবে
     if not await is_user_subscribed(context, user_id):
-        await query.answer("⚠️ Access Denied! You are not in the channels.", show_alert=True)
+        await query.answer("⚠️ Access Denied! Please join our channels first.", show_alert=True)
         return
 
     await query.answer()
@@ -252,11 +251,11 @@ async def handle_text_buttons(update: Update, context: CallbackContext):
     text = update.message.text
     user_id = update.effective_user.id
     
-    # টেক্সট বাটনেও প্রথমে জয়েন চেক করা হবে
+    # মেসেজ বক্সের বাটন চাপলেও মেম্বারশিপ কঠোরভাবে চেক হবে
     if not await is_user_subscribed(context, user_id):
         await update.message.reply_text(
-            f"⚠️ **Please join our channels to use the bot!**\n\n"
-            f"পরিষেবাটি ব্যবহার করতে প্রথমে নিচের চ্যানেলে জয়েন করুন।",
+            f"⚠️ **Access Denied!**\n\n"
+            f"বটের পরিষেবা ব্যবহার করতে প্রথমে আমাদের দুটি গ্রুপ/চ্যানেলে জয়েন সম্পন্ন করুন।",
             reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
         )
         return
