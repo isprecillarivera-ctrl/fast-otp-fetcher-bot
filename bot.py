@@ -15,36 +15,14 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-CHANNEL_1 = "@SUPERFIREUPDATE"
-CHANNEL_2 = "@SUPERFIREOTP"
-
+UPDATE_CHANNEL = "@SUPERFIREUPDATE"
+OTP_CHANNEL = "@SUPERFIREOTP"
 active_otp_tasks = {}
 
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
-
-def get_join_keyboard():
-    buttons = [
-        [InlineKeyboardButton("📢 Join Update Channel", url=f"https://t.me/{CHANNEL_1.replace('@', '')}")],
-        [InlineKeyboardButton("📢 Join OTP Channel", url=f"https://t.me/{CHANNEL_2.replace('@', '')}")],
-        [InlineKeyboardButton("✅ Check Joined / Verify", callback_data="check_membership")]
-    ]
-    return InlineKeyboardMarkup(buttons)
-
-async def is_user_subscribed(context: CallbackContext, user_id: int) -> bool:
-    try:
-        member1 = await context.bot.get_chat_member(chat_id=CHANNEL_1, user_id=user_id)
-        if member1.status in ['left', 'kicked']:
-            return False
-        member2 = await context.bot.get_chat_member(chat_id=CHANNEL_2, user_id=user_id)
-        if member2.status in ['left', 'kicked']:
-            return False
-        return True
-    except Exception as e:
-        logging.error(f"Membership verification error: {e}")
-        return True
 
 COUNTRY_MAP = {
     "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
@@ -55,251 +33,98 @@ COUNTRY_MAP = {
 def get_country_details(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
     prefix = clean_num[:3]
-    if prefix in COUNTRY_MAP:
-        return COUNTRY_MAP[prefix]["name"], COUNTRY_MAP[prefix]["flag"]
-    return "Premium Server", "🌍"
+    return COUNTRY_MAP.get(prefix, {"name": "Premium Server", "flag": "🌍"})
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
-        headers = {
-            "X-API-Key": API_KEY,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        async with httpx.AsyncClient(timeout=6.0, limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)) as client:
-            if method == "GET":
-                r = await client.get(url, headers=headers)
-            else:
-                r = await client.post(url, json=payload, headers=headers)
-            if r.status_code == 200:
-                return r.json()
-    except Exception as e:
-        logging.error(f"Async API Error: {e}")
-    return None
+        headers = {"X-API-Key": API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await (client.get(url, headers=headers) if method == "GET" else client.post(url, json=payload, headers=headers))
+            return r.json() if r.status_code == 200 else None
+    except: return None
 
-async def start(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    if not await is_user_subscribed(context, user_id):
-        await update.message.reply_text(
-            f"⚠️ **Please join our channels to use the bot!**\n\n"
-            f"আমাদের পরিষেবাগুলি ব্যবহার করতে প্রথমে নিচের দুটি চ্যানেলে জয়েন করে ভেরিফাই বাটনে ক্লিক করুন।",
-            reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    await update.message.reply_text(
-        f"👑 **𝖲𝖴𝖯𝖤𝖱 𝖥𝖨𝖱𝖤 𝖮𝖳𝖯 𝖤𝖭𝖦𝖨𝖭𝖤** 👑\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"⚡ _🔥 Premium & Ultra Fast Automated OTP Server_ ⚡\n\n"
-        f"👇 *Select an option from the menu below to start:*",
-        reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
-    )
-
-async def show_services_menu(message_obj):
-    buttons = [
-        [InlineKeyboardButton("🔷 🌐 FACEBOOK 🌐 🔷", callback_data="service_facebook")],
-        [InlineKeyboardButton("🔷 📸 INSTAGRAM 📸 🔷", callback_data="service_instagram")]
-    ]
-    await message_obj.reply_text(
-        f"💎 **𝖯𝖱𝖤𝖬𝖨𝖴𝖬 𝖲𝖤𝖱𝖵𝖨𝖢𝖤 𝖲𝖤𝖫𝖤𝖢𝖳𝖨𝖮𝖭**\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👇 *Please choose your target platform:*", 
-        reply_markup=InlineKeyboardMarkup(buttons), 
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def show_ranges_menu(message_obj, service_name):
-    api_response = await call_website_api_async("liveaccess", method="GET")
-    buttons = []
-    api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
-      
-    if api_response and (api_response.get("status") == "ok" or "services" in api_response):
-        services_list = api_response.get("services", [])
-        
-        for service in services_list:
-            if str(service.get("sid")).lower() == service_name.lower():
-                ranges_list = service.get("ranges", [])
-                
-                seen_countries = set()
-                for r in ranges_list:
-                    clean_r = re.sub(r'\D', '', str(r))
-                    prefix = clean_r[:3]
-                    
-                    if prefix in COUNTRY_MAP and prefix not in seen_countries:
-                        seen_countries.add(prefix)
-                        c_info = COUNTRY_MAP[prefix]
-                        buttons.append([InlineKeyboardButton(f"✨ {c_info['flag']} {c_info['name']} ✨", callback_data=f"range_{service_name}_{r}")])
-                break
-      
-    buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
-
-    await message_obj.reply_text(
-        f"🔥 **𝖫𝖨𝖵𝖤 𝖠𝖢𝖳𝖨𝖵𝖤 𝖲𝖤𝖱𝖵𝖤𝖱𝖲 [{api_service_name.upper()}]**\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"⚡ _Select your country to fetch number instantly:_ ", 
-        reply_markup=InlineKeyboardMarkup(buttons), 
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number):
+async def is_user_subscribed(context, user_id):
     try:
-        for attempt in range(1, 40):   
-            await asyncio.sleep(5)   
-            api_response = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
-            
-            if api_response:
-                data_sec = api_response.get("data", {})
-                otp_code = None
-                if isinstance(data_sec, dict):
-                    otp_code = data_sec.get("otp")
-                
-                if not otp_code and api_response.get("meta", {}).get("status") == "ok":
-                    otp_code = api_response.get("meta", {}).get("otp") or api_response.get("otp")
+        m1 = await context.bot.get_chat_member(chat_id=UPDATE_CHANNEL, user_id=user_id)
+        m2 = await context.bot.get_chat_member(chat_id=OTP_CHANNEL, user_id=user_id)
+        return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
+    except: return False
 
-                if otp_code:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id, message_id=original_msg_id,
-                        text=f"👑 **𝖲𝖴𝖢𝖢𝖤𝖲𝖲! 𝖮𝖳𝖯 𝖱𝖤𝖢𝖤𝖨𝖵𝖤𝖣** 👑\n"
-                             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                             f"🔢 **PHONE:** `+{original_number}`\n"
-                             f"🔑 **YOUR CODE:** `{otp_code}`\n\n"
-                             f"━━━━━━━━━━━━━━━━━━━━\n"
-                             f"💡 _কোডের ওপর আলতো ট্যাপ করলেই ইনস্ট্যান্ট কপি হয়ে যাবে।_",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                    return
-    except asyncio.CancelledError:
-        logging.info(f"OTP Loop cancelled for number {original_number}")
-        return
-
-    await context.bot.edit_message_text(
-        chat_id=chat_id, message_id=original_msg_id, 
-        text=f"❌ **𝖮𝖳𝖯 𝖳𝖨𝖬𝖤𝖮𝖴𝖳**\n"
-             f"━━━━━━━━━━━━━━━━━━━━\n"
-             f"No response received. Please drop this number and try a new one.", 
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def handle_callback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    data = query.data
-    chat_id = query.message.chat_id
-    
-    if data == "check_membership":
-        await query.answer("✅ Verification Successful!", show_alert=True)
-        try:
-            await query.message.delete()
-        except:
-            pass
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"👑 **𝖲𝖴𝖯𝖤𝖱 𝖥𝖨𝖱𝖤 𝖮𝖳𝖯 𝖤𝖭𝖦𝖨𝖭𝖤** 👑\n"
-                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                 f"🥳 আপনাকে স্বাগতম! আপনার ভেরিফিকেশন সফল হয়েছে।\n\n"
-                 f"👇 *Select an option from the menu below to start:*",
-            reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    await query.answer()
-
-    if data == "back_to_services":
-        await query.message.delete()
-        await show_services_menu(query.message)
-    elif data.startswith("service_"):
-        await query.message.delete()
-        await show_ranges_menu(query.message, data.split("_")[1])
-    elif data.startswith("range_") or data.startswith("chgnum_"):
-        parts = data.split("_")
-        service_name = parts[1]
-        selected_range = parts[2]
-        
-        if chat_id in active_otp_tasks:
-            active_otp_tasks[chat_id].cancel()
-            del active_otp_tasks[chat_id]
-            
-        status_msg = await query.message.edit_text("⚡ _Allocating a fresh dynamic number... Please wait._", parse_mode=ParseMode.MARKDOWN)
-        
-        payload = {"range": selected_range}
-        api_response = await call_website_api_async("getnum", method="POST", payload=payload)
-        
-        if api_response and api_response.get("meta", {}).get("status") == "ok":
-            num_data = api_response.get("data", {})
-            num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
-            clean_num = re.sub(r'\D', '', str(num))
-            num_id = num_data.get("id")
-            
-            c_name, c_flag = get_country_details(clean_num)
-            change_btn = [[InlineKeyboardButton("🔄 Change Number / Get New 🔄", callback_data=f"chgnum_{service_name}_{selected_range}")]]
-              
-            await status_msg.edit_text(
-                f"🚀 **𝖭𝖴𝖬𝖡𝖤𝖱 𝖠𝖫𝖫𝖮𝖢𝖠𝖳𝖤𝖣** 🚀\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📍 **COUNTRY:** {c_flag} {c_name}\n"
-                f"📱 **PHONE:** `+{clean_num}`\n"
-                f"⏳ **STATUS:** Waiting for incoming live OTP...\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"💡 _নাম্বারের ওপর আলতো ট্যাপ করলেই ইনস্ট্যান্ট কপি হয়ে যাবে।_",
-                reply_markup=InlineKeyboardMarkup(change_btn),
-                parse_mode=ParseMode.MARKDOWN
-            )
-
-            task = asyncio.create_task(
-                check_otp_loop(
-                    context, chat_id, num_id, 
-                    status_msg.message_id, clean_num
-                )
-            )
-            active_otp_tasks[chat_id] = task
-        else:
-            await status_msg.edit_text("❌ **Server Busy!**\nNo active numbers available right now in this country. Please try again.")
-
-async def handle_text_buttons(update: Update, context: CallbackContext):
-    text = update.message.text
+async def start(update, context):
     user_id = update.effective_user.id
-    
     if not await is_user_subscribed(context, user_id):
-        await update.message.reply_text(
-            f"⚠️ **Access Denied!**\n\n"
-            f"পরিষেবা ব্যবহার করতে প্রথমে আমাদের চ্যানেলে জয়েন সম্পন্ন করুন।",
-            reply_markup=get_join_keyboard(), parse_mode=ParseMode.MARKDOWN
-        )
-        return
+        kb = [[InlineKeyboardButton("📢 Join Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")],
+              [InlineKeyboardButton("📢 Join OTP Channel", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")],
+              [InlineKeyboardButton("✅ ভেরিফাই", callback_data="verify")]]
+        await update.message.reply_text("বটটি ব্যবহার করতে প্রথমে আমাদের গ্রুপগুলোতে জয়েন করুন এবং নিচে ভেরিফাই বাটনে ক্লিক করুন।", reply_markup=InlineKeyboardMarkup(kb))
+    else:
+        await update.message.reply_text("আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।", reply_markup=main_keyboard)
 
-    if "GET NUMBER" in text:
-        await show_services_menu(update.message)
-    elif "2FA CODE" in text:
-        await update.message.reply_text(
-            f"🔑 **𝖯𝖱𝖤𝖬𝖨𝖴𝖬 𝟤𝖥𝖠 𝖠𝖴𝖳𝖧𝖤𝖭𝖳𝖨𝖢𝖠𝖳𝖨𝖮𝖭**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚙️ Status: _System is under maintenance._\n"
-            f"⚡ _We are integrating premium high-speed 2FA servers._", 
-            parse_mode=ParseMode.MARKDOWN
-        )
-    elif "LIVE OTP SECTION" in text:
-        # এখানে আপনার @SUPERFIREOTP চ্যানেলটিকে লাইভ ওটিপি দেখার জন্য সংযুক্ত করা হলো
-        live_channel_btn = [[InlineKeyboardButton("📡 View Live OTP Channel 📡", url=f"https://t.me/{CHANNEL_2.replace('@', '')}")]]
+async def handle_callback(update, context):
+    query = update.callback_query
+    if query.data == "verify":
+        if await is_user_subscribed(context, query.from_user.id):
+            await query.message.delete()
+            await context.bot.send_message(chat_id=query.message.chat_id, text="স্বাগতম! আপনি এখন সকল সুবিধা ব্যবহার করতে পারবেন।", reply_markup=main_keyboard)
+        else: await query.answer("আপনি এখনও জয়েন করেননি!", show_alert=True)
+    elif query.data.startswith("range_") or query.data.startswith("chgnum_"):
+        parts = query.data.split("_")
+        if query.message.chat_id in active_otp_tasks: active_otp_tasks[query.message.chat_id].cancel()
         
-        await update.message.reply_text(
-            f"📡 **𝖫𝖨𝖵𝖤 𝖮𝖳𝖯 𝖲𝖳𝖠𝖳𝖴𝖲 𝖣𝖠𝖲𝖧𝖡𝖮𝖠𝖱𝖣**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🔥 **আমাদের সার্ভারের সমস্ত লাইভ ওটিপি আদান-প্রদান রিয়েল-টাইমে দেখতে নিচের বাটনে ক্লিক করুন!**\n\n"
-            f"🟢 **Server Connection:** Stable\n"
-            f"📶 **API Speed:** `0.1s` (Instant Log Feed)\n"
-            f"📊 **Global Success Rate:** `99.9%`\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"👇 _নিচের অফিশিয়াল লিংকে ক্লিক করে ওটিপি ফিডে প্রবেশ করুন:_ ", 
-            reply_markup=InlineKeyboardMarkup(live_channel_btn),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        status_msg = await query.message.edit_text("⚡ _Allocating number..._")
+        res = await call_website_api_async("getnum", method="POST", payload={"range": parts[2]})
+        if res and res.get("meta", {}).get("status") == "ok":
+            num = res["data"].get("full_number", res["data"].get("number"))
+            c = get_country_details(num)
+            btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
+            await status_msg.edit_text(f"🚀 **NUMBER ALLOCATED**\n\n📍 COUNTRY: {c['flag']} {c['name']}\n📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n⏳ STATUS: Waiting for OTP...", reply_markup=InlineKeyboardMarkup(btn), parse_mode=ParseMode.MARKDOWN)
+            active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, res["data"]["id"], status_msg.message_id, num))
+        else: await status_msg.edit_text("❌ Server Busy!")
+    elif query.data == "back_to_services":
+        await query.message.delete()
+        await show_services(query.message)
+    elif query.data.startswith("service_"):
+        await query.message.delete()
+        await show_ranges(query.message, query.data.split("_")[1])
 
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
-    app.run_polling()
+async def check_otp(context, chat_id, number_id, msg_id, number):
+    for _ in range(40):
+        await asyncio.sleep(5)
+        res = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
+        otp = res.get("data", {}).get("otp") if res else None
+        if otp:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=f"👑 SUCCESS! OTP RECEIVED\n\n🔑 CODE: `{otp}`", parse_mode=ParseMode.MARKDOWN)
+            return
+    await context.bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text="❌ TIMEOUT")
 
-if __name__ == '__main__':
-    main()
+async def show_services(msg):
+    kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")], [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]]
+    await msg.reply_text("Select platform:", reply_markup=InlineKeyboardMarkup(kb))
+
+async def show_ranges(msg, service):
+    res = await call_website_api_async("liveaccess", method="GET")
+    kb = []
+    seen = set()
+    for s in res.get("services", []):
+        if s["sid"].lower() == service.lower():
+            for r in s["ranges"]:
+                p = re.sub(r'\D', '', str(r))[:3]
+                if p in COUNTRY_MAP and p not in seen:
+                    seen.add(p)
+                    kb.append([InlineKeyboardButton(f"{COUNTRY_MAP[p]['flag']} {COUNTRY_MAP[p]['name']}", callback_data=f"range_{service}_{r}")])
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_services")])
+    await msg.reply_text("Select Country:", reply_markup=InlineKeyboardMarkup(kb))
+
+async def text_handler(update, context):
+    if await is_user_subscribed(context, update.effective_user.id):
+        if "GET NUMBER" in update.message.text: await show_services(update.message)
+        elif "2FA" in update.message.text: await update.message.reply_text("Maintenance Mode.")
+        elif "LIVE OTP" in update.message.text: await update.message.reply_text("Join Channel:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📡 View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]]))
+    else: await start(update, context)
+
+app = Application.builder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(handle_callback))
+app.add_handler(MessageHandler(filters.TEXT, text_handler))
+app.run_polling()
