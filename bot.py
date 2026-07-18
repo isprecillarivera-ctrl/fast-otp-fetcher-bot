@@ -15,7 +15,6 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# ইমোজি ছাড়া একদম ক্লিন এবং বড় কীবোর্ড বাটন
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("GET NUMBER")],
     [KeyboardButton("2FA CODE")]
@@ -24,20 +23,25 @@ main_keyboard = ReplyKeyboardMarkup([
 def get_flag_and_name(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
     if not clean_num:
-        return "International"
+        return None, None
       
+    # আপনার এপিআই রেঞ্জ অনুযায়ী সুনির্দিষ্ট দেশ ও পতাকার ম্যাপিং
     country_map = {
-        "261": "Madagascar", "224": "Guinea",
-        "232": "Sierra Leone", "236": "Central African Rep.",
-        "880": "Bangladesh", "91": "India",
-        "62": "Indonesia", "63": "Philippines",
-        "84": "Vietnam", "225": "Ivory Coast",
-        "380": "Ukraine"
+        "261": ("Madagascar", "🇲🇬"),
+        "224": ("Guinea", "🇬🇳"),
+        "236": ("Central African Rep.", "🇨🇫"),
+        "232": ("Sierra Leone", "🇸🇱"),
+        "225": ("Ivory Coast", "🇨🇮"),
+        "880": ("Bangladesh", "🇧🇩"),
+        "91": ("India", "🇮🇳"),
+        "380": ("Ukraine", "🇺🇦")
     }
-    for prefix, name in country_map.items():
+    
+    for prefix, info in country_map.items():
         if clean_num.startswith(prefix):
-            return name
-    return f"Country (+{clean_num[:3]})"
+            return info[0], info[1]
+            
+    return None, None  # তালিকায় না থাকলে বাটন জেনারেট করবে না
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -61,61 +65,66 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
-        f"Welcome to Fast OTP Fetcher Bot!\n\n"
-        f"Select an option from the menu below:",
+        f"🔥 **WELCOME TO SUPER FIRE OTP ENGINE** 🔥\n\n"
+        f"⚡ _Fastest & Most Reliable Automated OTP System._\n"
+        f"👇 Select an option from the menu below to start:",
         reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
     )
 
 async def show_services_menu(message_obj):
-    # অপ্রয়োজনীয় ইমোজি ছাড়া ক্লিন বড় বাটন
     buttons = [
         [InlineKeyboardButton("FACEBOOK", callback_data="service_facebook")],
         [InlineKeyboardButton("INSTAGRAM", callback_data="service_instagram")]
     ]
-    await message_obj.reply_text("Select your service:", reply_markup=InlineKeyboardMarkup(buttons))
+    await message_obj.reply_text("👇 **Select Your Target Service:**", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
 async def show_ranges_menu(message_obj, service_name):
     api_response = await call_website_api_async("liveaccess", method="GET")
     buttons = []
+    api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
       
     if api_response and api_response.get("status") == "ok":
         services_list = api_response.get("services", [])
-        api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
         
         for service in services_list:
             if service.get("sid") == api_service_name:
                 ranges_list = service.get("ranges", [])
                 for r in ranges_list:
-                    c_name = get_flag_and_name(r)
-                    # ইমোজি ছাড়া ক্লিন ফুল-উইডথ বাটন
-                    buttons.append([InlineKeyboardButton(f"{c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
+                    c_name, c_flag = get_flag_and_name(r)
+                    # শুধুমাত্র নির্দিষ্ট দেশগুলো পেলেই বাটন তৈরি করবে
+                    if c_name and c_flag:
+                        buttons.append([InlineKeyboardButton(f"{c_flag} {c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
                 break
       
-    buttons.append([InlineKeyboardButton("Back to Services", callback_data="back_to_services")])
+    buttons.append([InlineKeyboardButton("🔙 Back to Services", callback_data="back_to_services")])
 
     await message_obj.reply_text(
-        f"Live Ranges for {api_service_name}:", 
+        f"🟢 **LIVE ACTIVE RANGES FOR {api_service_name.upper()}**\n"
+        f"💡 _Select your preferred dynamic country range below:_ ", 
         reply_markup=InlineKeyboardMarkup(buttons), 
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number, service_name):
-    for _ in range(30):   
-        await asyncio.sleep(7)   
+    for attempt in range(1, 31):   
+        await asyncio.sleep(6)   
         api_response = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": number_id})
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
+                # ওটিপি আসলে এই আকর্ষণীয় মেসেজটি দেখাবে
                 await context.bot.edit_message_text(
                     chat_id=chat_id, message_id=original_msg_id,
-                    text=f"OTP RECEIVED\n\n{otp_code}\n\n(Tap number to copy)",
+                    text=f"✅ **SUCCESS! OTP RECEIVED** ✅\n\n"
+                         f"🔢 **YOUR CODE:** `{otp_code}`\n\n"
+                         f"👉 _Click on the code above to copy instantly!_",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
 
     await context.bot.edit_message_text(
         chat_id=chat_id, message_id=original_msg_id, 
-        text="OTP Timeout! Try another number.", 
+        text="❌ **OTP Timeout!**\nNo response from server. Please drop this and try another number.", 
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -140,8 +149,12 @@ async def handle_callback(update: Update, context: CallbackContext):
             num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
               
+            # নাম্বার আসার পর আকর্ষণীয় মেসেজ (নাম্বারে টিপ দিলে কপি হবে)
             sent_msg = await query.message.edit_text(
-                f"Number: +{clean_num}\nWaiting for OTP...",
+                f"🚀 **NUMBER ALLOCATED SUCCESSFULLY** 🚀\n\n"
+                f"📱 **PHONE:** `+{clean_num}`\n"
+                f"⏱️ **STATUS:** Waiting for incoming live OTP...\n\n"
+                f"📌 _💡 নাম্বারের ওপর চাপ দিলেই এটি অটোমেটিক কপি হয়ে যাবে।_",
                 parse_mode=ParseMode.MARKDOWN
             )
 
