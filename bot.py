@@ -15,22 +15,18 @@ GROUP_ID = -1003666001785
 
 logging.basicConfig(level=logging.INFO)
 
-# মেম্বার চেক ফাংশন
-async def is_user_in_group(context, user_id):
-    try:
-        member = await context.bot.get_chat_member(chat_id=GROUP_ID, user_id=user_id)
-        return member.status in ['member', 'administrator', 'creator']
-    except Exception as e:
-        logging.error(f"Group check error: {e}")
-        return False
-
 # মেনু কি-বোর্ড
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")]
+    [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")],
+    [KeyboardButton("📢 👁️ ━━━━━━ [ LIVE OTP CHANNEL ] ━━━━━━ 👁️ 📢")]
 ], resize_keyboard=True)
 
 async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text("✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n🤖 *বটটি ব্যবহার করতে আমাদের গ্রুপে জয়েন করুন:* @SUPERFIREOTP", reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(
+        "✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n\n"
+        "এখানে আপনি লাইভ ওটিপি আপডেট দেখতে পাবেন এবং দ্রুত নাম্বার নিতে পারবেন।", 
+        reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
+    )
 
 async def check_otp_loop(context, chat_id, number_id, original_msg_id, number_str, service):
     for _ in range(30):
@@ -40,22 +36,25 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, number_st
             if res.status_code == 200:
                 otp = res.json().get("data", {}).get("otp")
                 if otp:
+                    # ইউজারকে ওটিপি দেখানো
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=original_msg_id, text=f"✅ **OTP:** `{otp}`")
-                    await context.bot.send_message(chat_id=GROUP_ID, text=f"🚀 **New OTP Found!**\n📱 Number: {number_str}\n🔑 OTP: `{otp}`")
+                    # গ্রুপে ওটিপি পাঠানো
+                    await context.bot.send_message(chat_id=GROUP_ID, text=f"🚀 **New OTP Received!**\n📱 Number: `+{number_str}`\n🔑 OTP: `{otp}`", parse_mode=ParseMode.MARKDOWN)
                     return
     await context.bot.edit_message_text(chat_id=chat_id, message_id=original_msg_id, text="❌ **Timeout! কোনো ওটিপি পাওয়া যায়নি।**")
 
 async def handle_message(update: Update, context: CallbackContext):
     if not update.message.text: return
     
-    # গ্রুপ চেক
-    if not await is_user_in_group(context, update.effective_user.id):
-        await update.message.reply_text("⚠️ **আপনি গ্রুপে জয়েন করেননি!** প্রথমে আমাদের গ্রুপে জয়েন করুন: @SUPERFIREOTP")
-        return
-
     if "GET NUMBER" in update.message.text:
         buttons = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")]]
         await update.message.reply_text("👇 *সার্ভিস সিলেক্ট করুন:*", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
+    
+    elif "LIVE OTP CHANNEL" in update.message.text:
+        await update.message.reply_text(
+            "📢 **লাইভ ওটিপি আপডেট দেখতে এখানে জয়েন করুন:**\n\nhttps://t.me/SUPERFIREOTP",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
