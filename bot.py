@@ -72,7 +72,8 @@ async def show_ranges_menu(message_obj, service_name):
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_services")])
     await message_obj.reply_text(f"🔷 *Active Ranges for {service_name.upper()}* 🔷", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
-async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number):
+async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number, c_flag, c_name, service_name):
+    clean_number = re.sub(r'\D', '', str(original_number))
     for _ in range(30): 
         await asyncio.sleep(7) 
         api_response = await call_website_api_async({"action": "getotp", "id": number_id})
@@ -91,7 +92,6 @@ async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     data = query.data
     await query.answer()
-
     if data == "back_to_services":
         await query.message.delete()
         await show_services_menu(query.message)
@@ -105,12 +105,14 @@ async def handle_callback(update: Update, context: CallbackContext):
             num_data = api_response.get("data", {})
             num = num_data.get("full_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
+            c_name, c_flag = get_flag_and_name(clean_num)
             sent_msg = await query.message.edit_text(
                 f"📱 *Number:* `+{clean_num}`\n⏱️ *Waiting for OTP...*",
                 parse_mode=ParseMode.MARKDOWN
             )
-            asyncio.create_task(check_otp_loop(context, query.message.chat_id, num_data.get("id"), sent_msg.message_id, clean_num))
+            asyncio.create_task(check_otp_loop(context, query.message.chat_id, num_data.get("id"), sent_msg.message_id, clean_num, c_flag, c_name, parts[1]))
 
+# আপনার রিকোয়েস্ট অনুযায়ী মেসেজ হ্যান্ডলার আপডেট করা হলো
 async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text
     if "GET NUMBER" in text:
@@ -124,7 +126,9 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    # হ্যান্ডলারটি এখন সব বাটন সঠিকভাবে প্রসেস করবে
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    main()
