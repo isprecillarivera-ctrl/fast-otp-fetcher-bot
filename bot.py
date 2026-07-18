@@ -51,6 +51,19 @@ async def is_user_subscribed(context, user_id):
         return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
     except: return False
 
+async def check_otp(context, chat_id, number_id, number):
+    for _ in range(40):
+        await asyncio.sleep(3)
+        res = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
+        logging.info(f"OTP API Response for {number}: {res}")
+        otp = None
+        if res:
+            otp = res.get("otp") or res.get("data", {}).get("otp") or res.get("meta", {}).get("otp")
+        if otp:
+            await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
+            return
+    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`.")
+
 async def start(update, context):
     user_id = update.effective_user.id
     if not await is_user_subscribed(context, user_id):
@@ -71,7 +84,6 @@ async def handle_callback(update, context):
     elif query.data.startswith("range_") or query.data.startswith("chgnum_"):
         parts = query.data.split("_")
         if query.message.chat_id in active_otp_tasks: active_otp_tasks[query.message.chat_id].cancel()
-        
         status_msg = await query.message.edit_text("⚡ _Allocating number..._")
         res = await call_website_api_async("getnum", method="POST", payload={"range": parts[2]})
         if res and res.get("meta", {}).get("status") == "ok":
@@ -87,20 +99,6 @@ async def handle_callback(update, context):
     elif query.data.startswith("service_"):
         await query.message.delete()
         await show_ranges(query.message, query.data.split("_")[1])
-
-async def check_otp(context, chat_id, number_id, number):
-    for _ in range(40):
-        await asyncio.sleep(3)
-        res = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
-        otp = None
-        if res:
-            otp = res.get("otp") or res.get("data", {}).get("otp") or res.get("meta", {}).get("otp")
-            
-        if otp:
-            # সরাসরি ইউজারের চ্যাটে নতুন মেসেজ হিসেবে ওটিপি পাঠানো হচ্ছে
-            await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
-            return
-    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`.")
 
 async def show_services(msg):
     kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")], [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]]
