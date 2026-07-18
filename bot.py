@@ -15,7 +15,6 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার ছবির লেআউট অনুযায়ী কি-বোর্ড
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")],
     [KeyboardButton("📢 LIVE OTP"), KeyboardButton("🔒 2FA OPTION")]
@@ -92,6 +91,7 @@ async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     data = query.data
     await query.answer()
+
     if data == "back_to_services":
         await query.message.delete()
         await show_services_menu(query.message)
@@ -112,7 +112,7 @@ async def handle_callback(update: Update, context: CallbackContext):
             )
             asyncio.create_task(check_otp_loop(context, query.message.chat_id, num_data.get("id"), sent_msg.message_id, clean_num, c_flag, c_name, parts[1]))
 
-# আপনার রিকোয়েস্ট অনুযায়ী মেসেজ হ্যান্ডলার আপডেট করা হলো
+# এখানে আমি শুধুমাত্র নতুন লজিকটি আপনার অরিজিনাল ফরম্যাটে যোগ করেছি
 async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text
     if "GET NUMBER" in text:
@@ -123,38 +123,11 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text("🔒 **2FA Security Center.**", parse_mode=ParseMode.MARKDOWN)
 
 def main():
-    # handle_message ফাংশনটি main() এর বাইরে থাকবে
-async def handle_message(update: Update, context: CallbackContext):
-    text = update.message.text
-    if "GET NUMBER" in text:
-        await show_services_menu(update.message)
-    elif "LIVE OTP" in text:
-        await update.message.reply_text(
-            "📢 **লাইভ ওটিপি আপডেট গ্রুপ:** https://t.me/SUPERFIREOTP", 
-            parse_mode=ParseMode.MARKDOWN
-        )
-    elif "2FA OPTION" in text:
-        await update.message.reply_text(
-            "🔒 **2FA Security Center.**", 
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-# main ফাংশনটি শুধু একবার থাকবে
-def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    
-    # মেসেজ হ্যান্ডলারটি এখানে যোগ হবে
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
 if __name__ == '__main__':
     main()
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    
-    # নতুন মেসেজ হ্যান্ডলারটি এখানে যুক্ত হবে
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
