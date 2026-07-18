@@ -52,17 +52,20 @@ async def is_user_subscribed(context, user_id):
     except: return False
 
 async def check_otp(context, chat_id, number_id, number):
-    for _ in range(40):
-        await asyncio.sleep(3)
+    # ১৫ মিনিট (৯০০ সেকেন্ড) পর্যন্ত প্রতি ১ সেকেন্ড অন্তর চেক করা হচ্ছে
+    for _ in range(900):
+        await asyncio.sleep(1)
         res = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
-        logging.info(f"OTP API Response for {number}: {res}")
+        
         otp = None
         if res:
             otp = res.get("otp") or res.get("data", {}).get("otp") or res.get("meta", {}).get("otp")
+            
         if otp:
             await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
             return
-    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`.")
+            
+    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}` within 15 minutes.")
 
 async def start(update, context):
     user_id = update.effective_user.id
@@ -84,6 +87,7 @@ async def handle_callback(update, context):
     elif query.data.startswith("range_") or query.data.startswith("chgnum_"):
         parts = query.data.split("_")
         if query.message.chat_id in active_otp_tasks: active_otp_tasks[query.message.chat_id].cancel()
+        
         status_msg = await query.message.edit_text("⚡ _Allocating number..._")
         res = await call_website_api_async("getnum", method="POST", payload={"range": parts[2]})
         if res and res.get("meta", {}).get("status") == "ok":
