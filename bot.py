@@ -21,6 +21,7 @@ main_keyboard = ReplyKeyboardMarkup([
 ], resize_keyboard=True, is_persistent=True)
 
 def get_flag_and_name(number_str):
+    # সব ধরণের নন-ডিজিট ক্যারেক্টার বাদ দিয়ে শুধু নাম্বার ক্লিন করা
     clean_num = re.sub(r'\D', '', str(number_str))
     if not clean_num:
         return "International", "🌍"
@@ -38,16 +39,20 @@ def get_flag_and_name(number_str):
             return info
     return (f"Country (+{clean_num[:3]})", "🌍")
 
-async def call_website_api_async(payload):
+async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
-        url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
+        url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
         headers = {
             "X-API-Key": API_KEY,
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
         async with httpx.AsyncClient() as client:
-            r = await client.post(url, json=payload, headers=headers, timeout=15.0)
+            if method == "GET":
+                r = await client.get(url, headers=headers, timeout=15.0)
+            else:
+                r = await client.post(url, json=payload, headers=headers, timeout=15.0)
+                
             if r.status_code == 200:
                 return r.json()
     except Exception as e:
@@ -69,14 +74,23 @@ async def show_services_menu(message_obj):
     await message_obj.reply_text("👇 *Select your service:*", reply_markup=InlineKeyboardMarkup(buttons))
 
 async def show_ranges_menu(message_obj, service_name):
-    api_response = await call_website_api_async({"action": "getnum", "service": service_name, "type": "ranges"})
+    # liveaccess এন্ডপয়েন্ট থেকে গেট মেথডে লাইভ রেঞ্জ আনা হচ্ছে
+    api_response = await call_website_api_async("liveaccess", method="GET")
     buttons = []
       
-    if api_response and api_response.get("meta", {}).get("status") == "ok":
-        ranges_list = api_response.get("data", {}).get("ranges", [])
-        for r in ranges_list:
-            c_name, c_flag = get_flag_and_name(r)
-            buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{service_name}_{r}")])
+    if api_response and api_response.get("status") == "ok":
+        services_list = api_response.get("services", [])
+        
+        # কোডের নামের সাথে আপনার ওয়েবসাইটের বড় হাতের (Capitalized) নাম ম্যাচিং
+        api_service_name = "Facebook" if service_name == "facebook" else "Instagram"
+        
+        for service in services_list:
+            if service.get("sid") == api_service_name:
+                ranges_list = service.get("ranges", [])
+                for r in ranges_list:
+                    c_name, c_flag = get_flag_and_name(r)
+                    buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{service_name}_{r}")])
+                break
       
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_services")])
 
@@ -87,11 +101,10 @@ async def show_ranges_menu(message_obj, service_name):
     )
 
 async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_number, c_flag, c_name, service_name):
-    clean_number = re.sub(r'\D', '', str(original_number))
-      
     for _ in range(30):   
         await asyncio.sleep(7)   
-        api_response = await call_website_api_async({"action": "getotp", "id": number_id})
+        # ওটিপি চেক করার জন্য আপনার এপিআই পেলোড
+        api_response = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": number_id})
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
@@ -121,10 +134,13 @@ async def handle_callback(update: Update, context: CallbackContext):
         await show_ranges_menu(query.message, data.split("_")[1])
     elif data.startswith("range_"):
         parts = data.split("_")
-        api_response = await call_website_api_async({"action": "getnum", "service": parts[1], "range": parts[2]})
+        # আপনার ওয়েবসাইটের রিকোয়েস্ট বডি ফরম্যাট {"range": "26134XXX"} অনুযায়ী রিকোয়েস্ট পাঠানো
+        payload = {"range": parts[2]}
+        api_response = await call_website_api_async("getnum", method="POST", payload=payload)
+        
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             num_data = api_response.get("data", {})
-            num = num_data.get("full_number") or num_data.get("number")
+            num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
             c_name, c_flag = get_flag_and_name(clean_num)
               
