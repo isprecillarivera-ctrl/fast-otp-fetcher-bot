@@ -15,6 +15,7 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
+# আপনার বাটন লেআউট অনুযায়ী আপডেট করা হয়েছে
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")],
     [KeyboardButton("📢 LIVE OTP"), KeyboardButton("🔒 2FA OPTION")]
@@ -22,7 +23,8 @@ main_keyboard = ReplyKeyboardMarkup([
 
 def get_flag_and_name(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
-    if not clean_num: return "International", "🌍"
+    if not clean_num:
+        return "International", "🌍"
     
     country_map = {
         "261": ("Madagascar", "🇲🇬"), "224": ("Guinea", "🇬🇳"),
@@ -33,17 +35,24 @@ def get_flag_and_name(number_str):
         "380": ("Ukraine", "🇺🇦")
     }
     for prefix, info in country_map.items():
-        if clean_num.startswith(prefix): return info
+        if clean_num.startswith(prefix):
+            return info
     return (f"Country (+{clean_num[:3]})", "🌍")
 
 async def call_website_api_async(payload):
     try:
         url = "https://2eee7.com/@Access/@Bot/2eee7/@public/api/getnum"
-        headers = {"X-API-Key": API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
+        headers = {
+            "X-API-Key": API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
         async with httpx.AsyncClient() as client:
             r = await client.post(url, json=payload, headers=headers, timeout=15.0)
-            if r.status_code == 200: return r.json()
-    except Exception as e: logging.error(f"Async API Error: {e}")
+            if r.status_code == 200:
+                return r.json()
+    except Exception as e:
+        logging.error(f"Async API Error: {e}")
     return None
 
 async def start(update: Update, context: CallbackContext):
@@ -63,11 +72,13 @@ async def show_services_menu(message_obj):
 async def show_ranges_menu(message_obj, service_name):
     api_response = await call_website_api_async({"action": "getnum", "service": service_name, "type": "ranges"})
     buttons = []
+    
     if api_response and api_response.get("meta", {}).get("status") == "ok":
         ranges_list = api_response.get("data", {}).get("ranges", [])
         for r in ranges_list:
             c_name, c_flag = get_flag_and_name(r)
             buttons.append([InlineKeyboardButton(f"🔷 {c_flag} {c_name} ({r}) 🔷", callback_data=f"range_{service_name}_{r}")])
+    
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_services")])
     await message_obj.reply_text(f"🔷 *Active Ranges for {service_name.upper()}* 🔷", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
@@ -106,13 +117,15 @@ async def handle_callback(update: Update, context: CallbackContext):
             num = num_data.get("full_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
             c_name, c_flag = get_flag_and_name(clean_num)
+            
             sent_msg = await query.message.edit_text(
                 f"📱 *Number:* `+{clean_num}`\n⏱️ *Waiting for OTP...*",
                 parse_mode=ParseMode.MARKDOWN
             )
+
             asyncio.create_task(check_otp_loop(context, query.message.chat_id, num_data.get("id"), sent_msg.message_id, clean_num, c_flag, c_name, parts[1]))
 
-# এখানে আমি শুধুমাত্র নতুন লজিকটি আপনার অরিজিনাল ফরম্যাটে যোগ করেছি
+# মেসেজ হ্যান্ডলার যা আগের লজিক এবং নতুন বাটন দুটোই সামলাবে
 async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text
     if "GET NUMBER" in text:
@@ -126,6 +139,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    # আপনার অরিজিনাল মেসেজ হ্যান্ডলারের পরিবর্তে এটি ব্যবহার করুন
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
