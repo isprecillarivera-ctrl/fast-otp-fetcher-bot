@@ -15,11 +15,11 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# মেসেজ বক্সের নিচে ৩টি স্পেশাল অপশন বড় সাইজে এবং নীল ইমোজি লুক সহ যোগ করা হয়েছে
+# আপনার দেওয়া লেআউট অনুযায়ী কোনো অতিরিক্ত ইমোজি ছাড়া একদম ক্লিন বাটন
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("🔷 GET NUMBER")],
-    [KeyboardButton("🔷 2FA CODE")],
-    [KeyboardButton("🔷 LIVE OTP SECTION")]
+    [KeyboardButton("GET NUMBER")],
+    [KeyboardButton("2FA CODE")],
+    [KeyboardButton("LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
 def get_flag_and_name(number_str):
@@ -161,12 +161,11 @@ async def handle_callback(update: Update, context: CallbackContext):
 
 async def handle_text_buttons(update: Update, context: CallbackContext):
     text = update.message.text
-    if "GET NUMBER" in text:
+    if text == "GET NUMBER":
         await show_services_menu(update.message)
-    elif "2FA CODE" in text:
+    elif text == "2FA CODE":
         await update.message.reply_text("🔑 *2FA Code Function is currently processing...*", parse_mode=ParseMode.MARKDOWN)
-    elif "LIVE OTP SECTION" in text:
-        # লাইভ ওটিপি সেকশনের ইউজারদের আকৃষ্ট করার মেসেজ
+    elif text == "LIVE OTP SECTION":
         await update.message.reply_text(
             "📡 **LIVE OTP STATUS DASHBOARD** 📡\n\n"
             "🟢 **System Status:** fully Operational\n"
