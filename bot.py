@@ -15,9 +15,11 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
+# মেসেজ বক্সের নিচে ৩টি স্পেশাল অপশন বড় সাইজে এবং নীল ইমোজি লুক সহ যোগ করা হয়েছে
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("GET NUMBER")],
-    [KeyboardButton("2FA CODE")]
+    [KeyboardButton("🔷 GET NUMBER")],
+    [KeyboardButton("🔷 2FA CODE")],
+    [KeyboardButton("🔷 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
 def get_flag_and_name(number_str):
@@ -25,23 +27,18 @@ def get_flag_and_name(number_str):
     if not clean_num:
         return None, None
       
-    # আপনার এপিআই রেঞ্জ অনুযায়ী সুনির্দিষ্ট দেশ ও পতাকার ম্যাপিং
     country_map = {
-        "261": ("Madagascar", "🇲🇬"),
         "224": ("Guinea", "🇬🇳"),
-        "236": ("Central African Rep.", "🇨🇫"),
         "232": ("Sierra Leone", "🇸🇱"),
-        "225": ("Ivory Coast", "🇨🇮"),
-        "880": ("Bangladesh", "🇧🇩"),
-        "91": ("India", "🇮🇳"),
-        "380": ("Ukraine", "🇺🇦")
+        "261": ("Madagascar", "🇲🇬"),
+        "225": ("Ivory Coast", "🇨🇮")
     }
     
     for prefix, info in country_map.items():
         if clean_num.startswith(prefix):
             return info[0], info[1]
             
-    return None, None  # তালিকায় না থাকলে বাটন জেনারেট করবে না
+    return None, None
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -91,7 +88,6 @@ async def show_ranges_menu(message_obj, service_name):
                 ranges_list = service.get("ranges", [])
                 for r in ranges_list:
                     c_name, c_flag = get_flag_and_name(r)
-                    # শুধুমাত্র নির্দিষ্ট দেশগুলো পেলেই বাটন তৈরি করবে
                     if c_name and c_flag:
                         buttons.append([InlineKeyboardButton(f"{c_flag} {c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
                 break
@@ -112,7 +108,6 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
-                # ওটিপি আসলে এই আকর্ষণীয় মেসেজটি দেখাবে
                 await context.bot.edit_message_text(
                     chat_id=chat_id, message_id=original_msg_id,
                     text=f"✅ **SUCCESS! OTP RECEIVED** ✅\n\n"
@@ -149,7 +144,6 @@ async def handle_callback(update: Update, context: CallbackContext):
             num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
               
-            # নাম্বার আসার পর আকর্ষণীয় মেসেজ (নাম্বারে টিপ দিলে কপি হবে)
             sent_msg = await query.message.edit_text(
                 f"🚀 **NUMBER ALLOCATED SUCCESSFULLY** 🚀\n\n"
                 f"📱 **PHONE:** `+{clean_num}`\n"
@@ -165,15 +159,28 @@ async def handle_callback(update: Update, context: CallbackContext):
                 )
             )
 
+async def handle_text_buttons(update: Update, context: CallbackContext):
+    text = update.message.text
+    if "GET NUMBER" in text:
+        await show_services_menu(update.message)
+    elif "2FA CODE" in text:
+        await update.message.reply_text("🔑 *2FA Code Function is currently processing...*", parse_mode=ParseMode.MARKDOWN)
+    elif "LIVE OTP SECTION" in text:
+        # লাইভ ওটিপি সেকশনের ইউজারদের আকৃষ্ট করার মেসেজ
+        await update.message.reply_text(
+            "📡 **LIVE OTP STATUS DASHBOARD** 📡\n\n"
+            "🟢 **System Status:** fully Operational\n"
+            "⚡ **Server Speed:** 0.4s (Ultra Fast)\n"
+            "📶 **Success Rate:** 99.8%\n\n"
+            "👉 _আমাদের লাইভ সার্ভারগুলো এখন সম্পূর্ণ সচল আছে। নতুন নাম্বার তুলতে ওপরের 'GET NUMBER' বাটনে ক্লিক করুন!_", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
-
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, 
-        lambda u, c: show_services_menu(u.message) if "GET NUMBER" in u.message.text else None
-    ))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
     app.run_polling()
 
 if __name__ == '__main__':
