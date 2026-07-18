@@ -18,7 +18,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 CHANNEL_1 = "@SUPERFIREUPDATE"
 CHANNEL_2 = "@SUPERFIREOTP"
 
-# সক্রিয় ওটিপি টাস্কগুলো ট্র্যাক করার জন্য গ্লোবাল ডিকশনারি (নাম্বার চেঞ্জ করলে আগের লুপ বন্ধ করার জন্য)
 active_otp_tasks = {}
 
 main_keyboard = ReplyKeyboardMarkup([
@@ -147,7 +146,6 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
     try:
         for attempt in range(1, 40):   
             await asyncio.sleep(5)   
-            
             api_response = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
             
             if api_response:
@@ -172,7 +170,6 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
                     )
                     return
     except asyncio.CancelledError:
-        # নাম্বার চেঞ্জ বাটন টিপলে এই এরর জেনারেট হয়ে লুপ বন্ধ হবে
         logging.info(f"OTP Loop cancelled for number {original_number}")
         return
 
@@ -214,12 +211,10 @@ async def handle_callback(update: Update, context: CallbackContext):
         await query.message.delete()
         await show_ranges_menu(query.message, data.split("_")[1])
     elif data.startswith("range_") or data.startswith("chgnum_"):
-        # সাধারণ রিকোয়েস্ট অথবা নাম্বার পরিবর্তন রিকোয়েস্ট হ্যান্ডেল করা
         parts = data.split("_")
         service_name = parts[1]
         selected_range = parts[2]
         
-        # যদি ইউজার 'Change Number' বাটন টিপে, তবে আগের চলমান ওটিপি লুপটি ক্যানসেল করে দেওয়া হবে
         if chat_id in active_otp_tasks:
             active_otp_tasks[chat_id].cancel()
             del active_otp_tasks[chat_id]
@@ -236,8 +231,6 @@ async def handle_callback(update: Update, context: CallbackContext):
             num_id = num_data.get("id")
             
             c_name, c_flag = get_country_details(clean_num)
-            
-            # নাম্বার পরিবর্তন করার জন্য ইনলাইন বাটন প্রস্তুত করা
             change_btn = [[InlineKeyboardButton("🔄 Change Number / Get New 🔄", callback_data=f"chgnum_{service_name}_{selected_range}")]]
               
             await status_msg.edit_text(
@@ -252,7 +245,6 @@ async def handle_callback(update: Update, context: CallbackContext):
                 parse_mode=ParseMode.MARKDOWN
             )
 
-            # নতুন টাস্ক তৈরি করে ট্র্যাকিং ডিকশনারিতে রাখা
             task = asyncio.create_task(
                 check_otp_loop(
                     context, chat_id, num_id, 
@@ -286,14 +278,19 @@ async def handle_text_buttons(update: Update, context: CallbackContext):
             parse_mode=ParseMode.MARKDOWN
         )
     elif "LIVE OTP SECTION" in text:
+        # এখানে আপনার @SUPERFIREOTP চ্যানেলটিকে লাইভ ওটিপি দেখার জন্য সংযুক্ত করা হলো
+        live_channel_btn = [[InlineKeyboardButton("📡 View Live OTP Channel 📡", url=f"https://t.me/{CHANNEL_2.replace('@', '')}")]]
+        
         await update.message.reply_text(
             f"📡 **𝖫𝖨𝖵𝖤 𝖮𝖳𝖯 𝖲𝖳𝖠𝖳𝖴𝖲 𝖣𝖠𝖲𝖧𝖡𝖮𝖠𝖱𝖣**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🟢 **System Status:** Fully Operational\n"
-            f"⚡ **Server Speed:** `0.1s` (Hyper Fast)\n"
-            f"📶 **API Success Rate:** `99.9%`\n\n"
+            f"🔥 **আমাদের সার্ভারের সমস্ত লাইভ ওটিপি আদান-প্রদান রিয়েল-টাইমে দেখতে নিচের বাটনে ক্লিক করুন!**\n\n"
+            f"🟢 **Server Connection:** Stable\n"
+            f"📶 **API Speed:** `0.1s` (Instant Log Feed)\n"
+            f"📊 **Global Success Rate:** `99.9%`\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"👉 _আমাদের লাইভ ক্লাউড সার্ভারগুলো এখন সম্পূর্ণ সচল আছে। নতুন নাম্বার তুলতে ওপরের '🔥 GET NUMBER 🔥' বাটনে ক্লিক করুন!_", 
+            f"👇 _নিচের অফিশিয়াল লিংকে ক্লিক করে ওটিপি ফিডে প্রবেশ করুন:_ ", 
+            reply_markup=InlineKeyboardMarkup(live_channel_btn),
             parse_mode=ParseMode.MARKDOWN
         )
 
