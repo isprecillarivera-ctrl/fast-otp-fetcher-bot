@@ -123,12 +123,38 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text("🔒 **2FA Security Center.**", parse_mode=ParseMode.MARKDOWN)
 
 def main():
+    # handle_message ফাংশনটি main() এর বাইরে থাকবে
+async def handle_message(update: Update, context: CallbackContext):
+    text = update.message.text
+    if "GET NUMBER" in text:
+        await show_services_menu(update.message)
+    elif "LIVE OTP" in text:
+        await update.message.reply_text(
+            "📢 **লাইভ ওটিপি আপডেট গ্রুপ:** https://t.me/SUPERFIREOTP", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+    elif "2FA OPTION" in text:
+        await update.message.reply_text(
+            "🔒 **2FA Security Center.**", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+# main ফাংশনটি শুধু একবার থাকবে
+def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    # হ্যান্ডলারটি এখন সব বাটন সঠিকভাবে প্রসেস করবে
+    
+    # মেসেজ হ্যান্ডলারটি এখানে যোগ হবে
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
 if __name__ == '__main__':
     main()
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    
+    # নতুন মেসেজ হ্যান্ডলারটি এখানে যুক্ত হবে
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.run_polling()
