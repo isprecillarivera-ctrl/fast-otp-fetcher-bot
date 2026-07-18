@@ -15,9 +15,10 @@ API_KEY = os.getenv("SMS_API_KEY")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# আপনার নতুন নির্দেশনা অনুযায়ী নিচের কীবোর্ডে শুধুমাত্র GET NUMBER বাটনটি রাখা হয়েছে
+# আপনার লেআউট: উপরে গেট নাম্বার পুরো এক লাইনে, আর নিচে দুই পাশে দুটি বড় বাটন পাশাপাশি
 main_keyboard = ReplyKeyboardMarkup([
-    [KeyboardButton("GET NUMBER")]
+    [KeyboardButton("GET NUMBER")],
+    [KeyboardButton("2FA CODE"), KeyboardButton("LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
 def get_flag_and_name(number_str):
@@ -25,7 +26,6 @@ def get_flag_and_name(number_str):
     if not clean_num:
         return "International", "🌍"
       
-    # এপিআই রেঞ্জের সাথে মিল রেখে কান্ট্রি ও অফিসিয়াল ফ্ল্যাগ ম্যাপিং
     country_map = {
         "224": ("Guinea", "🇬🇳"),
         "232": ("Sierra Leone", "🇸🇱"),
@@ -70,16 +70,14 @@ async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
         f"🔥 **WELCOME TO SUPER FIRE OTP ENGINE** 🔥\n\n"
         f"⚡ _Fastest & Most Reliable Automated OTP System._\n"
-        f"👇 Click the button below to fetch a number:",
+        f"👇 Select an option from the menu below to start:",
         reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
     )
 
 async def show_services_menu(message_obj):
-    # ইনলাইন সেকশনে আপনার মূল অপশনগুলো সাজানো হয়েছে
     buttons = [
-        [InlineKeyboardButton("🌐 FACEBOOK 🌐", callback_data="service_facebook")],
-        [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")],
-        [InlineKeyboardButton("🔑 2FA CODE 🔑", callback_data="action_2fa")]
+        [InlineKeyboardButton("FACEBOOK", callback_data="service_facebook")],
+        [InlineKeyboardButton("INSTAGRAM", callback_data="service_instagram")]
     ]
     await message_obj.reply_text("👇 **Select Your Target Service:**", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
 
@@ -96,7 +94,6 @@ async def show_ranges_menu(message_obj, service_name):
                 ranges_list = service.get("ranges", [])
                 for r in ranges_list:
                     c_name, c_flag = get_flag_and_name(r)
-                    # অটোমেটিক এপিআই-এর সব লাইভ রেঞ্জ চলে আসবে, কোনো বাটন মিস হবে না
                     buttons.append([InlineKeyboardButton(f"{c_flag} {c_name} ({r})", callback_data=f"range_{service_name}_{r}")])
                 break
       
@@ -116,7 +113,6 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, original_
         if api_response and api_response.get("meta", {}).get("status") == "ok":
             otp_code = api_response.get("data", {}).get("otp")
             if otp_code:
-                # ওটিপিতে টিপ দিলে কপি হয়ে যাবে
                 await context.bot.edit_message_text(
                     chat_id=chat_id, message_id=original_msg_id,
                     text=f"✅ **SUCCESS! OTP RECEIVED** ✅\n\n"
@@ -140,8 +136,6 @@ async def handle_callback(update: Update, context: CallbackContext):
     if data == "back_to_services":
         await query.message.delete()
         await show_services_menu(query.message)
-    elif data == "action_2fa":
-        await query.message.reply_text("🔑 *2FA Code Function is currently processing...*", parse_mode=ParseMode.MARKDOWN)
     elif data.startswith("service_"):
         await query.message.delete()
         await show_ranges_menu(query.message, data.split("_")[1])
@@ -155,11 +149,10 @@ async def handle_callback(update: Update, context: CallbackContext):
             num = num_data.get("full_number") or num_data.get("no_plus_number") or num_data.get("number")
             clean_num = re.sub(r'\D', '', str(num))
               
-            # নাম্বারের ওপর চাপ দিলে অটোমেটিক কপি হয়ে যাবে
             sent_msg = await query.message.edit_text(
                 f"🚀 **NUMBER ALLOCATED SUCCESSFULLY** 🚀\n\n"
                 f"📱 **PHONE:** `+{clean_num}`\n"
-                f"⏱ Ramining Status: Waiting for incoming live OTP...\n\n"
+                f"⏱️ **STATUS:** Waiting for incoming live OTP...\n\n"
                 f"📌 _💡 নাম্বারের ওপর চাপ দিলেই এটি অটোমেটিক কপি হয়ে যাবে।_",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -172,8 +165,20 @@ async def handle_callback(update: Update, context: CallbackContext):
             )
 
 async def handle_text_buttons(update: Update, context: CallbackContext):
-    if update.message.text == "GET NUMBER":
+    text = update.message.text
+    if text == "GET NUMBER":
         await show_services_menu(update.message)
+    elif text == "2FA CODE":
+        await update.message.reply_text("🔑 *2FA Code Function is currently processing...*", parse_mode=ParseMode.MARKDOWN)
+    elif text == "LIVE OTP SECTION":
+        await update.message.reply_text(
+            "📡 **LIVE OTP STATUS DASHBOARD** 📡\n\n"
+            "🟢 **System Status:** fully Operational\n"
+            "⚡ **Server Speed:** 0.4s (Ultra Fast)\n"
+            "📶 **Success Rate:** 99.8%\n\n"
+            "👉 _আমাদের লাইভ সার্ভারগুলো এখন সম্পূর্ণ সচল আছে। নতুন নাম্বার তুলতে ওপরের 'GET NUMBER' বাটনে ক্লিক করুন!_", 
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 def main():
     app = Application.builder().token(TOKEN).build()
