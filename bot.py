@@ -15,16 +15,15 @@ GROUP_ID = -1003666001785
 
 logging.basicConfig(level=logging.INFO)
 
-# মেনু কি-বোর্ড
+# মেইন কি-বোর্ড লেআউট
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 🌟 ━━━━━━ [ GET NUMBER ] ━━━━━━ 🌟 🔥")],
-    [KeyboardButton("📢 👁️ ━━━━━━ [ LIVE OTP CHANNEL ] ━━━━━━ 👁️ 📢")]
+    [KeyboardButton("📢 LIVE OTP"), KeyboardButton("🔒 2FA OPTION")]
 ], resize_keyboard=True)
 
 async def start(update: Update, context: CallbackContext):
     await update.message.reply_text(
-        "✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n\n"
-        "এখানে আপনি লাইভ ওটিপি আপডেট দেখতে পাবেন এবং দ্রুত নাম্বার নিতে পারবেন।", 
+        "✨ **WELCOME TO SUPER FIRE OTP ENGINE** ✨\n\nনিচ থেকে আপনার প্রয়োজনীয় অপশনটি সিলেক্ট করুন।", 
         reply_markup=main_keyboard, parse_mode=ParseMode.MARKDOWN
     )
 
@@ -36,25 +35,27 @@ async def check_otp_loop(context, chat_id, number_id, original_msg_id, number_st
             if res.status_code == 200:
                 otp = res.json().get("data", {}).get("otp")
                 if otp:
-                    # ইউজারকে ওটিপি দেখানো
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=original_msg_id, text=f"✅ **OTP:** `{otp}`")
-                    # গ্রুপে ওটিপি পাঠানো
                     await context.bot.send_message(chat_id=GROUP_ID, text=f"🚀 **New OTP Received!**\n📱 Number: `+{number_str}`\n🔑 OTP: `{otp}`", parse_mode=ParseMode.MARKDOWN)
                     return
     await context.bot.edit_message_text(chat_id=chat_id, message_id=original_msg_id, text="❌ **Timeout! কোনো ওটিপি পাওয়া যায়নি।**")
 
 async def handle_message(update: Update, context: CallbackContext):
-    if not update.message.text: return
-    
-    if "GET NUMBER" in update.message.text:
-        buttons = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")]]
+    text = update.message.text
+    if "GET NUMBER" in text:
+        buttons = [
+            [InlineKeyboardButton("🔵 FACEBOOK 🔵", callback_data="service_facebook")],
+            [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")],
+            [InlineKeyboardButton("🐦 TWITTER 🐦", callback_data="service_twitter")],
+            [InlineKeyboardButton("💬 WHATSAPP 💬", callback_data="service_whatsapp")]
+        ]
         await update.message.reply_text("👇 *সার্ভিস সিলেক্ট করুন:*", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=ParseMode.MARKDOWN)
     
-    elif "LIVE OTP CHANNEL" in update.message.text:
-        await update.message.reply_text(
-            "📢 **লাইভ ওটিপি আপডেট দেখতে এখানে জয়েন করুন:**\n\nhttps://t.me/SUPERFIREOTP",
-            parse_mode=ParseMode.MARKDOWN
-        )
+    elif "LIVE OTP" in text:
+        await update.message.reply_text("📢 **লাইভ ওটিপি চ্যানেলে জয়েন করুন:**\nhttps://t.me/SUPERFIREOTP", parse_mode=ParseMode.MARKDOWN)
+        
+    elif "2FA OPTION" in text:
+        await update.message.reply_text("🔒 **টু-ফ্যাক্টর অপশন:**\nএখানে আপনি টু-ফ্যাক্টর বাইপাস বা রিকভারি সম্পর্কিত সেবা পাবেন।", parse_mode=ParseMode.MARKDOWN)
 
 async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
