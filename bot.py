@@ -51,19 +51,21 @@ async def is_user_subscribed(context, user_id):
         return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
     except: return False
 
-async def check_otp(context, chat_id, number_id, number):
+async def check_otp(context, chat_id, number):
     # ১৫ মিনিট (৯০০ সেকেন্ড) পর্যন্ত প্রতি ১ সেকেন্ড অন্তর চেক করা হচ্ছে
     for _ in range(900):
         await asyncio.sleep(1)
-        res = await call_website_api_async("getotp", method="POST", payload={"action": "getotp", "id": int(number_id)})
+        # এন্ডপয়েন্ট 'success-otp-info' ব্যবহার করা হয়েছে
+        res = await call_website_api_async("success-otp-info", method="GET")
         
-        otp = None
-        if res:
-            otp = res.get("otp") or res.get("data", {}).get("otp") or res.get("meta", {}).get("otp")
-            
-        if otp:
-            await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
-            return
+        if res and "data" in res and "otps" in res["data"]:
+            # ওটিপি লিস্ট থেকে ইউজারকে দেওয়া নাম্বারের সাথে মিল খুঁজছি
+            for item in res["data"]["otps"]:
+                if str(item.get("number")) == str(number):
+                    otp = item.get("otp")
+                    if otp:
+                        await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
+                        return
             
     await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}` within 15 minutes.")
 
@@ -95,7 +97,7 @@ async def handle_callback(update, context):
             c = get_country_details(num)
             btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
             await status_msg.edit_text(f"🚀 **NUMBER ALLOCATED**\n\n📍 COUNTRY: {c['flag']} {c['name']}\n📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n⏳ STATUS: Waiting for OTP...", reply_markup=InlineKeyboardMarkup(btn), parse_mode=ParseMode.MARKDOWN)
-            active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, res["data"]["id"], num))
+            active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, num))
         else: await status_msg.edit_text("❌ Server Busy!")
     elif query.data == "back_to_services":
         await query.message.delete()
