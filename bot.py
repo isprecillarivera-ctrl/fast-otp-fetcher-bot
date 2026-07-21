@@ -3,6 +3,7 @@ import re
 import os
 import httpx
 import asyncio
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, MessageHandler, filters, CallbackContext, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode
@@ -46,11 +47,11 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 r = await client.post(url, json=payload, headers=headers)
             
             if r.status_code != 200:
-                logging.warning(f"API {endpoint} failed: {r.status_code} - {r.text[:200]}")
+                logging.warning(f"API {endpoint} failed: {r.status_code}")
                 return None
             return r.json()
     except Exception as e:
-        logging.error(f"API call error for {endpoint}: {e}")
+        logging.error(f"API call error: {e}")
         return None
 
 async def is_user_subscribed(context, user_id):
@@ -61,9 +62,9 @@ async def is_user_subscribed(context, user_id):
     except:
         return False
 
-async def check_otp(context, chat_id, number):
+async def check_otp(context, chat_id, number, username=None):
     full_number = re.sub(r'\D', '', str(number))
-    logging.info(f"🔍 Starting OTP monitor for +{full_number}")
+    logging.info(f"🔍 Monitoring OTP for +{full_number} by {username or 'Unknown'}")
     
     for attempt in range(900):
         await asyncio.sleep(2)
@@ -77,19 +78,44 @@ async def check_otp(context, chat_id, number):
                     if item_num == full_number or item_num.endswith(full_number[-8:]):
                         otp = item.get("otp") or item.get("code") or item.get("sms")
                         if otp:
+                            # আকর্ষণীয় পাবলিক মেসেজ
+                            public_text = f"""
+🌟 **SUPER FIRE OTP** 🌟
+
+🔥 **NEW OTP RECEIVED** 🔥
+
+📱 **Number:** `+{number}`
+🔑 **OTP Code:** `{otp}`
+⏱ **Time Taken:** {attempt*2} seconds
+🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
+
+👤 **User:** @{username or 'Anonymous'}
+━━━━━━━━━━━━━━━━━━━━
+🚀 @SUPERFIREOTP • Fast & Reliable OTP Service
+                            """
+                            # পাবলিক চ্যানেলে পাঠানো
+                            try:
+                                await context.bot.send_message(
+                                    chat_id=OTP_CHANNEL,
+                                    text=public_text.strip(),
+                                    parse_mode=ParseMode.MARKDOWN
+                                )
+                            except Exception as e:
+                                logging.error(f"Channel send error: {e}")
+                            
+                            # প্রাইভেট ইউজারকে
                             await context.bot.send_message(
                                 chat_id=chat_id,
-                                text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n📱 **Number:** `+{number}`\n🔑 **OTP:** `{otp}`\n⏱ Time: {attempt*2} seconds",
+                                text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n📱 `+{number}`\n🔑 `{otp}`",
                                 parse_mode=ParseMode.MARKDOWN
                             )
-                            logging.info(f"✅ OTP Found and Sent: {otp}")
+                            logging.info(f"✅ OTP Broadcasted: {otp}")
                             return
         except Exception as e:
-            logging.error(f"Error in OTP check: {e}")
+            logging.error(f"OTP check error: {e}")
             continue
     
-    await context.bot.send_message(chat_id=chat_id, 
-                                   text=f"❌ **TIMEOUT!**\n+{number} এর জন্য ১৫ মিনিটের মধ্যে OTP পাওয়া যায়নি।")
+    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`")
 
 async def start(update, context):
     user_id = update.effective_user.id
@@ -121,7 +147,9 @@ async def handle_callback(update, context):
             c = get_country_details(num)
             btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
             await status_msg.edit_text(f"🚀 **NUMBER ALLOCATED**\n\n📍 COUNTRY: {c['flag']} {c['name']}\n📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n⏳ STATUS: Waiting for OTP...", reply_markup=InlineKeyboardMarkup(btn), parse_mode=ParseMode.MARKDOWN)
-            active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, num))
+            active_otp_tasks[query.message.chat_id] = asyncio.create_task(
+                check_otp(context, query.message.chat_id, num, query.from_user.username)
+            )
         else:
             await status_msg.edit_text("❌ Server Busy!")
     elif query.data == "back_to_services":
@@ -169,5 +197,5 @@ app.add_handler(CallbackQueryHandler(handle_callback))
 app.add_handler(MessageHandler(filters.TEXT, text_handler))
 
 if __name__ == "__main__":
-    logging.info("🤖 Bot Started Successfully!")
+    logging.info("🤖 SUPER FIRE OTP Bot Started!")
     app.run_polling()
