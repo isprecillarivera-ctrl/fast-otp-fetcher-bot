@@ -39,35 +39,57 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
         headers = {"X-API-Key": API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            r = await (client.get(url, headers=headers) if method == "GET" else client.post(url, json=payload, headers=headers))
-            return r.json() if r.status_code == 200 else None
-    except: return None
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if method == "GET":
+                r = await client.get(url, headers=headers)
+            else:
+                r = await client.post(url, json=payload, headers=headers)
+            
+            if r.status_code != 200:
+                logging.warning(f"API {endpoint} failed: {r.status_code} - {r.text[:200]}")
+                return None
+            return r.json()
+    except Exception as e:
+        logging.error(f"API call error for {endpoint}: {e}")
+        return None
 
 async def is_user_subscribed(context, user_id):
     try:
         m1 = await context.bot.get_chat_member(chat_id=UPDATE_CHANNEL, user_id=user_id)
         m2 = await context.bot.get_chat_member(chat_id=OTP_CHANNEL, user_id=user_id)
         return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
-    except: return False
+    except:
+        return False
 
 async def check_otp(context, chat_id, number):
-    # ১৫ মিনিট (৯০০ সেকেন্ড) পর্যন্ত প্রতি ১ সেকেন্ড অন্তর চেক করা হচ্ছে
-    for _ in range(900):
-        await asyncio.sleep(1)
-        # এন্ডপয়েন্ট 'success-otp-info' ব্যবহার করা হয়েছে
-        res = await call_website_api_async("success-otp-info", method="GET")
+    full_number = re.sub(r'\D', '', str(number))
+    logging.info(f"🔍 Starting OTP monitor for +{full_number}")
+    
+    for attempt in range(900):
+        await asyncio.sleep(2)
         
-        if res and "data" in res and "otps" in res["data"]:
-            # ওটিপি লিস্ট থেকে ইউজারকে দেওয়া নাম্বারের সাথে মিল খুঁজছি
-            for item in res["data"]["otps"]:
-                if str(item.get("number")) == str(number):
-                    otp = item.get("otp")
-                    if otp:
-                        await context.bot.send_message(chat_id=chat_id, text=f"👑 **SUCCESS! OTP RECEIVED**\n\n📱 **NUMBER:** `+{number}`\n🔑 **CODE:** `{otp}`", parse_mode=ParseMode.MARKDOWN)
-                        return
+        try:
+            res = await call_website_api_async("success-otp-info", method="GET")
             
-    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}` within 15 minutes.")
+            if res and "data" in res and "otps" in res.get("data", {}):
+                for item in res["data"]["otps"]:
+                    item_num = re.sub(r'\D', '', str(item.get("number", "")))
+                    if item_num == full_number or item_num.endswith(full_number[-8:]):
+                        otp = item.get("otp") or item.get("code") or item.get("sms")
+                        if otp:
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n📱 **Number:** `+{number}`\n🔑 **OTP:** `{otp}`\n⏱ Time: {attempt*2} seconds",
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+                            logging.info(f"✅ OTP Found and Sent: {otp}")
+                            return
+        except Exception as e:
+            logging.error(f"Error in OTP check: {e}")
+            continue
+    
+    await context.bot.send_message(chat_id=chat_id, 
+                                   text=f"❌ **TIMEOUT!**\n+{number} এর জন্য ১৫ মিনিটের মধ্যে OTP পাওয়া যায়নি।")
 
 async def start(update, context):
     user_id = update.effective_user.id
@@ -85,10 +107,12 @@ async def handle_callback(update, context):
         if await is_user_subscribed(context, query.from_user.id):
             await query.message.delete()
             await context.bot.send_message(chat_id=query.message.chat_id, text="স্বাগতম! আপনি এখন সকল সুবিধা ব্যবহার করতে পারবেন।", reply_markup=main_keyboard)
-        else: await query.answer("আপনি এখনও জয়েন করেননি!", show_alert=True)
+        else:
+            await query.answer("আপনি এখনও জয়েন করেননি!", show_alert=True)
     elif query.data.startswith("range_") or query.data.startswith("chgnum_"):
         parts = query.data.split("_")
-        if query.message.chat_id in active_otp_tasks: active_otp_tasks[query.message.chat_id].cancel()
+        if query.message.chat_id in active_otp_tasks:
+            active_otp_tasks[query.message.chat_id].cancel()
         
         status_msg = await query.message.edit_text("⚡ _Allocating number..._")
         res = await call_website_api_async("getnum", method="POST", payload={"range": parts[2]})
@@ -98,7 +122,8 @@ async def handle_callback(update, context):
             btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
             await status_msg.edit_text(f"🚀 **NUMBER ALLOCATED**\n\n📍 COUNTRY: {c['flag']} {c['name']}\n📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n⏳ STATUS: Waiting for OTP...", reply_markup=InlineKeyboardMarkup(btn), parse_mode=ParseMode.MARKDOWN)
             active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, num))
-        else: await status_msg.edit_text("❌ Server Busy!")
+        else:
+            await status_msg.edit_text("❌ Server Busy!")
     elif query.data == "back_to_services":
         await query.message.delete()
         await show_services(query.message)
@@ -107,7 +132,8 @@ async def handle_callback(update, context):
         await show_ranges(query.message, query.data.split("_")[1])
 
 async def show_services(msg):
-    kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")], [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]]
+    kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")], 
+          [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]]
     await msg.reply_text("Select platform:", reply_markup=InlineKeyboardMarkup(kb))
 
 async def show_ranges(msg, service):
@@ -117,7 +143,7 @@ async def show_ranges(msg, service):
     target_service = service.lower()
     for s in res.get("services", []):
         if target_service in s["sid"].lower() or (target_service == "instagram" and "ig" in s["sid"].lower()):
-            for r in s["ranges"]:
+            for r in s.get("ranges", []):
                 p = re.sub(r'\D', '', str(r))[:3]
                 if p in COUNTRY_MAP and p not in seen:
                     seen.add(p)
@@ -127,13 +153,21 @@ async def show_ranges(msg, service):
 
 async def text_handler(update, context):
     if await is_user_subscribed(context, update.effective_user.id):
-        if "GET NUMBER" in update.message.text: await show_services(update.message)
-        elif "2FA" in update.message.text: await update.message.reply_text("Maintenance Mode.")
-        elif "LIVE OTP" in update.message.text: await update.message.reply_text("Join Channel:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📡 View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]]))
-    else: await start(update, context)
+        text = update.message.text
+        if "GET NUMBER" in text:
+            await show_services(update.message)
+        elif "2FA" in text:
+            await update.message.reply_text("Maintenance Mode.")
+        elif "LIVE OTP" in text:
+            await update.message.reply_text("Join Channel:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📡 View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]]))
+    else:
+        await start(update, context)
 
 app = Application.builder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(handle_callback))
 app.add_handler(MessageHandler(filters.TEXT, text_handler))
-app.run_polling()
+
+if __name__ == "__main__":
+    logging.info("🤖 Bot Started Successfully!")
+    app.run_polling()
