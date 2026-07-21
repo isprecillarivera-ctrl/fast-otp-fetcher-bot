@@ -64,7 +64,7 @@ async def is_user_subscribed(context, user_id):
 
 async def check_otp(context, chat_id, number, username=None):
     full_number = re.sub(r'\D', '', str(number))
-    logging.info(f"🔍 Monitoring OTP for +{full_number} by {username or 'Unknown'}")
+    logging.info(f"🔍 Monitoring OTP for +{full_number}")
     
     for attempt in range(900):
         await asyncio.sleep(2)
@@ -78,38 +78,47 @@ async def check_otp(context, chat_id, number, username=None):
                     if item_num == full_number or item_num.endswith(full_number[-8:]):
                         otp = item.get("otp") or item.get("code") or item.get("sms")
                         if otp:
-                            # আকর্ষণীয় পাবলিক মেসেজ
+                            # অর্ধেক নাম্বার দেখানো
+                            visible = full_number[:6] if len(full_number) > 6 else full_number
+                            hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
+                            
+                            country = get_country_details(number)
+                            flag = country['flag']
+                            
                             public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
 
 🔥 **NEW OTP RECEIVED** 🔥
 
-📱 **Number:** `+{number}`
+{flag} **Number:** `{hidden_number}`
 🔑 **OTP Code:** `{otp}`
 ⏱ **Time Taken:** {attempt*2} seconds
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
-
-👤 **User:** @{username or 'Anonymous'}
-━━━━━━━━━━━━━━━━━━━━
-🚀 @SUPERFIREOTP • Fast & Reliable OTP Service
                             """
-                            # পাবলিক চ্যানেলে পাঠানো
+                            # বাটন
+                            keyboard = InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", callback_data=f"private_otp_{full_number}")],
+                                [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url="https://t.me/SUPERFIREUPDATE")]
+                            ])
+                            
+                            # গ্রুপে পাঠানো
                             try:
                                 await context.bot.send_message(
-                                    chat_id=OTP_CHANNEL,
-                                    text=public_text.strip(),
-                                    parse_mode=ParseMode.MARKDOWN
+                                    chat_id=OTP_CHANNEL, 
+                                    text=public_text.strip(), 
+                                    parse_mode=ParseMode.MARKDOWN,
+                                    reply_markup=keyboard
                                 )
                             except Exception as e:
                                 logging.error(f"Channel send error: {e}")
                             
-                            # প্রাইভেট ইউজারকে
+                            # প্রাইভেট চ্যাটে পুরো নাম্বার
                             await context.bot.send_message(
                                 chat_id=chat_id,
                                 text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n📱 `+{number}`\n🔑 `{otp}`",
                                 parse_mode=ParseMode.MARKDOWN
                             )
-                            logging.info(f"✅ OTP Broadcasted: {otp}")
+                            logging.info(f"✅ OTP Sent: {otp}")
                             return
         except Exception as e:
             logging.error(f"OTP check error: {e}")
@@ -160,7 +169,7 @@ async def handle_callback(update, context):
         await show_ranges(query.message, query.data.split("_")[1])
 
 async def show_services(msg):
-    kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")], 
+    kb = [[InlineKeyboardButton("🔷 FACEBOOK 🔷", callback_data="service_facebook")],
           [InlineKeyboardButton("📸 INSTAGRAM 📸", callback_data="service_instagram")]]
     await msg.reply_text("Select platform:", reply_markup=InlineKeyboardMarkup(kb))
 
