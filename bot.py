@@ -5,7 +5,7 @@ import httpx
 import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, MessageHandler, filters, CallbackContext, CommandHandler, CallbackQueryHandler
+from telegram.ext import Application, MessageHandler, filters, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode
 from dotenv import load_dotenv
 
@@ -19,6 +19,8 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 UPDATE_CHANNEL = "@SUPERFIREUPDATE"
 OTP_CHANNEL = "@SUPERFIREOTP"
 active_otp_tasks = {}
+
+BOT_USERNAME = "SUPER_FIRE_OTP_BOT"
 
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
@@ -78,41 +80,34 @@ async def check_otp(context, chat_id, number, username=None):
                     if item_num == full_number or item_num.endswith(full_number[-8:]):
                         otp = item.get("otp") or item.get("code") or item.get("sms")
                         if otp:
-                            # অর্ধেক নাম্বার দেখানো
                             visible = full_number[:6] if len(full_number) > 6 else full_number
                             hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
-                            
                             country = get_country_details(number)
-                            flag = country['flag']
                             
                             public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
 
 🔥 **NEW OTP RECEIVED** 🔥
 
-{flag} **Number:** `{hidden_number}`
+{country['flag']} **{country['name']}**
+📱 **Number:** `{hidden_number}`
 🔑 **OTP Code:** `{otp}`
 ⏱ **Time Taken:** {attempt*2} seconds
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
                             """
-                            # বাটন
+                            
                             keyboard = InlineKeyboardMarkup([
-                                [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", callback_data=f"private_otp_{full_number}")],
-                                [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url="https://t.me/SUPERFIREUPDATE")]
+                                [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", url=f"https://t.me/{BOT_USERNAME}")],
+                                [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")]
                             ])
                             
-                            # গ্রুপে পাঠানো
-                            try:
-                                await context.bot.send_message(
-                                    chat_id=OTP_CHANNEL, 
-                                    text=public_text.strip(), 
-                                    parse_mode=ParseMode.MARKDOWN,
-                                    reply_markup=keyboard
-                                )
-                            except Exception as e:
-                                logging.error(f"Channel send error: {e}")
+                            await context.bot.send_message(
+                                chat_id=OTP_CHANNEL,
+                                text=public_text.strip(),
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=keyboard
+                            )
                             
-                            # প্রাইভেট চ্যাটে পুরো নাম্বার
                             await context.bot.send_message(
                                 chat_id=chat_id,
                                 text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n📱 `+{number}`\n🔑 `{otp}`",
@@ -138,12 +133,15 @@ async def start(update, context):
 
 async def handle_callback(update, context):
     query = update.callback_query
+    await query.answer()
+    
     if query.data == "verify":
         if await is_user_subscribed(context, query.from_user.id):
             await query.message.delete()
             await context.bot.send_message(chat_id=query.message.chat_id, text="স্বাগতম! আপনি এখন সকল সুবিধা ব্যবহার করতে পারবেন।", reply_markup=main_keyboard)
         else:
             await query.answer("আপনি এখনও জয়েন করেননি!", show_alert=True)
+    
     elif query.data.startswith("range_") or query.data.startswith("chgnum_"):
         parts = query.data.split("_")
         if query.message.chat_id in active_otp_tasks:
@@ -161,6 +159,7 @@ async def handle_callback(update, context):
             )
         else:
             await status_msg.edit_text("❌ Server Busy!")
+    
     elif query.data == "back_to_services":
         await query.message.delete()
         await show_services(query.message)
@@ -206,5 +205,5 @@ app.add_handler(CallbackQueryHandler(handle_callback))
 app.add_handler(MessageHandler(filters.TEXT, text_handler))
 
 if __name__ == "__main__":
-    logging.info("🤖 SUPER FIRE OTP Bot Started!")
+    logging.info("🤖 SUPER FIRE OTP Bot Started Successfully!")
     app.run_polling()
