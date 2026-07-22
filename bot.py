@@ -59,14 +59,15 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
             else:
                 r = await client.post(url, json=payload or {}, headers=headers)
             
-            logger.info(f"API {endpoint} Status: {r.status_code}")
+            logger.info(f"API {endpoint} → Status: {r.status_code}")
             if r.status_code != 200:
+                logger.warning(f"API failed with status {r.status_code}")
                 return None
             data = r.json()
-            logger.info(f"API Response: {data}")
+            logger.info(f"API Response Data: {data}")
             return data
     except Exception as e:
-        logger.error(f"API call error ({endpoint}): {e}")
+        logger.error(f"API Exception ({endpoint}): {e}")
         return None
 
 async def auto_refresh_ranges():
@@ -164,38 +165,34 @@ async def handle_callback(update: Update, context):
             active_otp_tasks.pop(chat_id, None)
 
         parts = query.data.split("_")
-        if len(parts) < 3:
-            await query.message.edit_text("❌ Invalid callback.")
-            return
+        range_value = parts[2] if len(parts) > 2 else "1"
 
-        range_value = parts[2]
-        logger.info(f"🔄 Trying range: {range_value}")
+        logger.info(f"🔄 Requesting number with range: {range_value}")
 
-        status_msg = await query.message.edit_text("⚡ Allocating number... (Please wait)")
+        status_msg = await query.message.edit_text(f"⚡ Allocating number with range {range_value}...")
 
         res = await call_website_api_async("getnum", method="POST", payload={"range": range_value})
 
-        if res and res.get("meta", {}).get("status") == "ok":
-            num = res["data"].get("full_number") or res["data"].get("number")
-            c = ALLOWED_COUNTRIES.get(str(num)[:3]) if num else None
+        if res and isinstance(res, dict) and res.get("meta", {}).get("status") == "ok":
+            num = res.get("data", {}).get("full_number") or res.get("data", {}).get("number")
+            if num:
+                c = ALLOWED_COUNTRIES.get(str(num)[:3])
+                if c:
+                    btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1] if len(parts)>1 else '1'}_{range_value}")]]
+                    await status_msg.edit_text(
+                        f"🚀 **NUMBER ALLOCATED**\n\n"
+                        f"📍 COUNTRY: {c['flag']} {c['name']}\n"
+                        f"📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n"
+                        f"⏳ STATUS: Waiting for OTP...",
+                        reply_markup=InlineKeyboardMarkup(btn),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
+                    return
 
-            if not num or not c:
-                await status_msg.edit_text("❌ No valid number received.")
-                return
-
-            btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{range_value}")]]
-
-            await status_msg.edit_text(
-                f"🚀 **NUMBER ALLOCATED**\n\n"
-                f"📍 COUNTRY: {c['flag']} {c['name']}\n"
-                f"📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n"
-                f"⏳ STATUS: Waiting for OTP...",
-                reply_markup=InlineKeyboardMarkup(btn),
-                parse_mode=ParseMode.MARKDOWN
-            )
-            active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
-        else:
-            await status_msg.edit_text("❌ Server Busy or Invalid Range! Try another country.")
+        # If failed
+        error = str(res)[:300] if res else "No response from API"
+        await status_msg.edit_text(f"❌ Failed to get number.\n\nDebug: {error}")
 
 async def text_handler(update: Update, context):
     if not await is_user_subscribed(context, update.effective_user.id):
