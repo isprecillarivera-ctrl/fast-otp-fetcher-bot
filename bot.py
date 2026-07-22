@@ -28,7 +28,6 @@ OTP_CHANNEL = "@SUPERFIREOTP"
 BOT_USERNAME = "SUPER_FIRE_OTP_BOT"
 
 active_otp_tasks = {}
-live_ranges_cache = {}  # Live ranges from API
 
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
@@ -43,24 +42,11 @@ ALLOWED_COUNTRIES = {
     "229": {"name": "Benin", "flag": "🇧🇯"},
 }
 
-# ==================== LIVE RANGES ====================
-async def fetch_live_ranges():
-    global live_ranges_cache
-    while True:
-        try:
-            res = await call_website_api_async("liveaccess", method="GET")
-            if res and "services" in res:
-                live_ranges_cache = {}
-                for service in res["services"]:
-                    sid = service.get("sid", "").lower()
-                    ranges = service.get("ranges", [])
-                    live_ranges_cache[sid] = ranges
-                logger.info(f"✅ Live ranges updated! Total services: {len(live_ranges_cache)}")
-            else:
-                logger.warning("No live ranges data")
-        except Exception as e:
-            logger.error(f"Live ranges fetch error: {e}")
-        await asyncio.sleep(30)  # প্রতি ৩০ সেকেন্ডে
+def get_country_keyboard():
+    buttons = []
+    for code, data in ALLOWED_COUNTRIES.items():
+        buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
+    return InlineKeyboardMarkup(buttons)
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -77,57 +63,69 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 return None
             return r.json()
     except Exception as e:
-        logger.error(f"API Error: {e}")
+        logger.error(f"API call error: {e}")
         return None
 
-# ==================== KEYBOARD ====================
-def get_country_keyboard():
-    buttons = []
-    for code, data in ALLOWED_COUNTRIES.items():
-        buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
-    return InlineKeyboardMarkup(buttons)
+async def auto_refresh_ranges():
+    while True:
+        try:
+            await call_website_api_async("liveaccess", method="GET")
+        except Exception as e:
+            logger.error(f"Auto refresh error: {e}")
+        await asyncio.sleep(60)
 
-# ==================== OTHER FUNCTIONS ====================
 async def is_user_subscribed(context, user_id):
     try:
         m1 = await context.bot.get_chat_member(chat_id=UPDATE_CHANNEL, user_id=user_id)
         m2 = await context.bot.get_chat_member(chat_id=OTP_CHANNEL, user_id=user_id)
         return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
-    except:
+    except Exception as e:
+        logger.warning(f"Subscription check failed: {e}")
         return True
 
 async def check_otp(context, chat_id, number):
-    # (আগের কোডের মতো রাখুন - সংক্ষেপে)
     full_number = re.sub(r'\D', '', str(number))
+    logger.info(f"🔍 Monitoring OTP for +{full_number}")
     seen_otps = set()
-    for attempt in range(900):
-        await asyncio.sleep(2)
-        res = await call_website_api_async("success-otp-info", method="GET")
-        if res and "data" in res and "otps" in res.get("data", {}):
-            for item in res["data"]["otps"]:
-                item_num = re.sub(r'\D', '', str(item.get("number", "")))
-                if item_num == full_number or item_num.endswith(full_number[-8:]):
-                    otp = item.get("otp") or item.get("code") or item.get("sms")
-                    if otp and otp not in seen_otps:
-                        seen_otps.add(otp)
-                        country = ALLOWED_COUNTRIES.get(full_number[:3])
-                        c_flag = country["flag"] if country else "🌍"
-                        c_name = country["name"] if country else "Unknown"
-                        visible = full_number[:6] if len(full_number) > 6 else full_number
-                        hidden = f"+{visible}{'*' * (len(full_number)-len(visible))}"
+    try:
+        for attempt in range(900):
+            await asyncio.sleep(2)
+            res = await call_website_api_async("success-otp-info", method="GET")
+            if res and "data" in res and "otps" in res.get("data", {}):
+                for item in res["data"]["otps"]:
+                    item_num = re.sub(r'\D', '', str(item.get("number", "")))
+                    if item_num == full_number or item_num.endswith(full_number[-8:]):
+                        otp = item.get("otp") or item.get("code") or item.get("sms")
+                        if otp and otp not in seen_otps:
+                            seen_otps.add(otp)
+                            country = ALLOWED_COUNTRIES.get(full_number[:3])
+                            c_flag = country["flag"] if country else "🌍"
+                            c_name = country["name"] if country else "Unknown"
+                            visible = full_number[:6] if len(full_number) > 6 else full_number
+                            hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
 
-                        public_text = f"""
+                            public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
 🔥 **NEW OTP RECEIVED** 🔥
 {c_flag} **{c_name}**
-📱 **Number:** `{hidden}`
+📱 **Number:** `{hidden_number}`
 🔑 **OTP Code:** `{otp}`
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
-                        """
-                        await context.bot.send_message(OTP_CHANNEL, public_text.strip(), parse_mode=ParseMode.MARKDOWN)
-                        await context.bot.send_message(chat_id, f"✅ **OTP RECEIVED!**\n📱 `+{number}`\n🔑 `{otp}`", parse_mode=ParseMode.MARKDOWN)
-                        return
-    await context.bot.send_message(chat_id, "❌ Timeout!")
+                            """
+                            keyboard = InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", url=f"https://t.me/{BOT_USERNAME}")],
+                                [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")]
+                            ])
+
+                            await context.bot.send_message(chat_id=OTP_CHANNEL, text=public_text.strip(), parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+                            await context.bot.send_message(chat_id=chat_id, text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n📱 `+{number}`\n🔑 `{otp}`", parse_mode=ParseMode.MARKDOWN)
+                            return
+    except asyncio.CancelledError:
+        logger.info(f"OTP monitoring cancelled for +{full_number}")
+    except Exception as e:
+        logger.error(f"OTP check error: {e}")
+    finally:
+        active_otp_tasks.pop(chat_id, None)
 
 async def start(update: Update, context):
     user_id = update.effective_user.id
@@ -212,9 +210,8 @@ if __name__ == "__main__":
 
     async def post_init(application):
         application.create_task(auto_refresh_ranges())
-        application.create_task(fetch_live_ranges())
 
     app.post_init = post_init
 
-    logger.info("🤖 SUPER FIRE OTP Bot Started with Live Range Update!")
+    logger.info("🤖 SUPER FIRE OTP Bot Started Successfully!")
     app.run_polling(drop_pending_updates=True)
