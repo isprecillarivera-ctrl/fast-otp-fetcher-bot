@@ -28,31 +28,39 @@ OTP_CHANNEL = "@SUPERFIREOTP"
 BOT_USERNAME = "SUPER_FIRE_OTP_BOT"
 
 active_otp_tasks = {}
-live_ranges = {}  # Auto updated ranges
+live_ranges_cache = {}  # Live ranges from API
 
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# ==================== LIVE RANGE FETCH ====================
+ALLOWED_COUNTRIES = {
+    "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
+    "224": {"name": "Guinea", "flag": "🇬🇳"},
+    "225": {"name": "Ivory Coast", "flag": "🇨🇮"},
+    "261": {"name": "Madagascar", "flag": "🇲🇬"},
+    "229": {"name": "Benin", "flag": "🇧🇯"},
+}
+
+# ==================== LIVE RANGES ====================
 async def fetch_live_ranges():
-    global live_ranges
+    global live_ranges_cache
     while True:
         try:
             res = await call_website_api_async("liveaccess", method="GET")
             if res and "services" in res:
-                live_ranges = {}
+                live_ranges_cache = {}
                 for service in res["services"]:
                     sid = service.get("sid", "").lower()
                     ranges = service.get("ranges", [])
-                    live_ranges[sid] = ranges
-                logger.info(f"✅ Live ranges updated. Services: {list(live_ranges.keys())}")
+                    live_ranges_cache[sid] = ranges
+                logger.info(f"✅ Live ranges updated! Total services: {len(live_ranges_cache)}")
             else:
-                logger.warning("No live ranges received")
+                logger.warning("No live ranges data")
         except Exception as e:
-            logger.error(f"Live range fetch error: {e}")
-        await asyncio.sleep(60)  # প্রতি ৬০ সেকেন্ডে আপডেট
+            logger.error(f"Live ranges fetch error: {e}")
+        await asyncio.sleep(30)  # প্রতি ৩০ সেকেন্ডে
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -69,17 +77,17 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 return None
             return r.json()
     except Exception as e:
-        logger.error(f"API call error: {e}")
+        logger.error(f"API Error: {e}")
         return None
 
-# ==================== COUNTRY KEYBOARD ====================
-def get_dynamic_country_keyboard():
+# ==================== KEYBOARD ====================
+def get_country_keyboard():
     buttons = []
     for code, data in ALLOWED_COUNTRIES.items():
         buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
     return InlineKeyboardMarkup(buttons)
 
-# ==================== OTHER FUNCTIONS (সংক্ষেপে) ====================
+# ==================== OTHER FUNCTIONS ====================
 async def is_user_subscribed(context, user_id):
     try:
         m1 = await context.bot.get_chat_member(chat_id=UPDATE_CHANNEL, user_id=user_id)
@@ -145,21 +153,42 @@ async def handle_callback(update: Update, context):
             await query.answer("আপনি এখনও জয়েন করেননি!", show_alert=True)
         return
 
-    if query.data.startswith("range_"):
-        # আপনার আগের লজিক রাখুন
+    if query.data.startswith("range_") or query.data.startswith("chgnum_"):
+        chat_id = query.message.chat_id
+        if chat_id in active_otp_tasks:
+            task = active_otp_tasks[chat_id]
+            if not task.done():
+                task.cancel()
+            active_otp_tasks.pop(chat_id, None)
+
         parts = query.data.split("_")
-        range_value = parts[2]
+        range_value = parts[2] if len(parts) > 2 else "1"
+
         status_msg = await query.message.edit_text("⚡ Allocating number...")
+
         res = await call_website_api_async("getnum", method="POST", payload={"range": range_value})
+
         if res and res.get("meta", {}).get("status") == "ok":
-            num = res.get("data", {}).get("full_number") or res.get("data", {}).get("number")
-            c = ALLOWED_COUNTRIES.get(str(num)[:3]) if num else None
-            if c and num:
-                btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{range_value}")]]
-                await status_msg.edit_text(f"🚀 **NUMBER ALLOCATED**\n\n{c['flag']} {c['name']}\n📱 `+{num}`\n⏳ Waiting...", reply_markup=InlineKeyboardMarkup(btn), parse_mode=ParseMode.MARKDOWN)
-                active_otp_tasks[query.message.chat_id] = asyncio.create_task(check_otp(context, query.message.chat_id, num))
+            data = res.get("data", {})
+            num = data.get("full_number") or data.get("number") or data.get("national_number")
+           
+            if num:
+                c = ALLOWED_COUNTRIES.get(str(num)[:3])
+                if not c:
+                    c = {"flag": "🌍", "name": "International"}
+                btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1] if len(parts)>1 else '1'}_{range_value}")]]
+                await status_msg.edit_text(
+                    f"🚀 **NUMBER ALLOCATED**\n\n"
+                    f"📍 COUNTRY: {c['flag']} {c['name']}\n"
+                    f"📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n"
+                    f"⏳ STATUS: Waiting for OTP...",
+                    reply_markup=InlineKeyboardMarkup(btn),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
                 return
-        await status_msg.edit_text("❌ Failed to allocate. Try another.")
+
+        await status_msg.edit_text("❌ Failed to allocate number. Try another country.")
 
 async def text_handler(update: Update, context):
     if not await is_user_subscribed(context, update.effective_user.id):
@@ -168,7 +197,7 @@ async def text_handler(update: Update, context):
     text = update.message.text.upper()
 
     if "GET NUMBER" in text:
-        await update.message.reply_text("👇 **দেশ সিলেক্ট করুন:**", reply_markup=get_dynamic_country_keyboard(), parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("👇 **দেশ সিলেক্ট করুন:**", reply_markup=get_country_keyboard(), parse_mode=ParseMode.MARKDOWN)
     elif "2FA" in text:
         await update.message.reply_text("🔧 Maintenance Mode.")
     elif "LIVE OTP" in text:
@@ -182,8 +211,8 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
     async def post_init(application):
-        application.create_task(fetch_live_ranges())
         application.create_task(auto_refresh_ranges())
+        application.create_task(fetch_live_ranges())
 
     app.post_init = post_init
 
