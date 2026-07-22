@@ -48,6 +48,11 @@ def get_country_keyboard():
         buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
     return InlineKeyboardMarkup(buttons)
 
+def get_country_info(number):
+    full = re.sub(r'\D', '', str(number))
+    prefix = full[:3]
+    return ALLOWED_COUNTRIES.get(prefix, {"flag": "🌍", "name": "International"})
+
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
@@ -83,7 +88,7 @@ async def is_user_subscribed(context, user_id):
         logger.warning(f"Subscription check failed: {e}")
         return True
 
-async def check_otp(context, chat_id, number, service="Unknown"):
+async def check_otp(context, chat_id, number):
     full_number = re.sub(r'\D', '', str(number))
     logger.info(f"🔍 Monitoring OTP for +{full_number}")
     seen_otps = set()
@@ -98,23 +103,18 @@ async def check_otp(context, chat_id, number, service="Unknown"):
                         otp = item.get("otp") or item.get("code") or item.get("sms")
                         if otp and otp not in seen_otps:
                             seen_otps.add(otp)
-                            country = ALLOWED_COUNTRIES.get(full_number[:3])
-                            c_flag = country["flag"] if country else "🌍"
-                            c_name = country["name"] if country else "International"
-
+                            country = get_country_info(full_number)
                             visible = full_number[:6] if len(full_number) > 6 else full_number
                             hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
 
                             public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
 🔥 **NEW OTP RECEIVED** 🔥
-{c_flag} **{c_name}**
+{country['flag']} **{country['name']}**
 📱 **Number:** `{hidden_number}`
 🔑 **OTP Code:** `{otp}`
-🔗 **Service:** {service.upper()}
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
                             """
-
                             keyboard = InlineKeyboardMarkup([
                                 [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", url=f"https://t.me/{BOT_USERNAME}")],
                                 [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")]
@@ -174,19 +174,17 @@ async def handle_callback(update: Update, context):
             num = data.get("full_number") or data.get("number") or data.get("national_number")
            
             if num:
-                c = ALLOWED_COUNTRIES.get(str(num)[:3])
-                if not c:
-                    c = {"flag": "🌍", "name": "International"}
+                country = get_country_info(num)
                 btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1] if len(parts)>1 else '1'}_{range_value}")]]
                 await status_msg.edit_text(
                     f"🚀 **NUMBER ALLOCATED**\n\n"
-                    f"📍 COUNTRY: {c['flag']} {c['name']}\n"
+                    f"📍 COUNTRY: {country['flag']} {country['name']}\n"
                     f"📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n"
                     f"⏳ STATUS: Waiting for OTP...",
                     reply_markup=InlineKeyboardMarkup(btn),
                     parse_mode=ParseMode.MARKDOWN
                 )
-                active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num, service="Facebook"))
+                active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
                 return
 
         await status_msg.edit_text("❌ Failed to allocate number. Try another country.")
