@@ -42,14 +42,10 @@ ALLOWED_COUNTRIES = {
     "229": {"name": "Benin", "flag": "🇧🇯"},
 }
 
-# ==================== HELPERS ====================
 def get_country_keyboard():
     buttons = []
     for code, data in ALLOWED_COUNTRIES.items():
-        buttons.append([InlineKeyboardButton(
-            f"{data['flag']} {data['name']}", 
-            callback_data=f"range_{code}_1"
-        )])
+        buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
     return InlineKeyboardMarkup(buttons)
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
@@ -86,7 +82,7 @@ async def is_user_subscribed(context, user_id):
         return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
     except Exception as e:
         logger.warning(f"Subscription check failed: {e}")
-        return True  # টেস্টিং এর জন্য (পরে False করবেন)
+        return True  # টেস্টিং এর জন্য
 
 async def check_otp(context, chat_id, number):
     full_number = re.sub(r'\D', '', str(number))
@@ -97,7 +93,6 @@ async def check_otp(context, chat_id, number):
         for attempt in range(900):
             await asyncio.sleep(2)
             res = await call_website_api_async("success-otp-info", method="GET")
-            
             if res and "data" in res and "otps" in res.get("data", {}):
                 for item in res["data"]["otps"]:
                     item_num = re.sub(r'\D', '', str(item.get("number", "")))
@@ -108,7 +103,6 @@ async def check_otp(context, chat_id, number):
                             country = ALLOWED_COUNTRIES.get(full_number[:3])
                             c_flag = country["flag"] if country else "🌍"
                             c_name = country["name"] if country else "Unknown"
-
                             visible = full_number[:6] if len(full_number) > 6 else full_number
                             hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
 
@@ -120,7 +114,6 @@ async def check_otp(context, chat_id, number):
 🔑 **OTP Code:** `{otp}`
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
                             """
-
                             keyboard = InlineKeyboardMarkup([
                                 [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", url=f"https://t.me/{BOT_USERNAME}")],
                                 [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")]
@@ -136,7 +129,6 @@ async def check_otp(context, chat_id, number):
     finally:
         active_otp_tasks.pop(chat_id, None)
 
-# ==================== HANDLERS ====================
 async def start(update: Update, context):
     user_id = update.effective_user.id
     if not await is_user_subscribed(context, user_id):
@@ -145,15 +137,9 @@ async def start(update: Update, context):
             [InlineKeyboardButton("📢 Join OTP Channel", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")],
             [InlineKeyboardButton("✅ ভেরিফাই", callback_data="verify")]
         ]
-        await update.message.reply_text(
-            "বটটি ব্যবহার করতে প্রথমে আমাদের গ্রুপগুলোতে জয়েন করুন এবং নিচে ভেরিফাই বাটনে ক্লিক করুন।",
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
+        await update.message.reply_text("বটটি ব্যবহার করতে প্রথমে আমাদের গ্রুপগুলোতে জয়েন করুন এবং নিচে ভেরিফাই বাটনে ক্লিক করুন।", reply_markup=InlineKeyboardMarkup(kb))
     else:
-        await update.message.reply_text(
-            "আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।",
-            reply_markup=main_keyboard
-        )
+        await update.message.reply_text("আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।", reply_markup=main_keyboard)
 
 async def handle_callback(update: Update, context):
     query = update.callback_query
@@ -214,12 +200,9 @@ async def text_handler(update: Update, context):
     if "GET NUMBER" in text:
         await update.message.reply_text("👇 **দেশ সিলেক্ট করুন:**", reply_markup=get_country_keyboard(), parse_mode=ParseMode.MARKDOWN)
     elif "2FA" in text:
-        await update.message.reply_text("🔧 2FA Maintenance Mode.")
+        await update.message.reply_text("🔧 Maintenance Mode.")
     elif "LIVE OTP" in text:
-        await update.message.reply_text(
-            "📡 Live OTP দেখতে:", 
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]])
-        )
+        await update.message.reply_text("📡 Live OTP দেখতে:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]]))
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
@@ -229,7 +212,11 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    asyncio.create_task(auto_refresh_ranges())
+    # Fixed: Use proper way to start background task
+    async def post_init(application):
+        application.create_task(auto_refresh_ranges())
 
-    logger.info("🤖 SUPER FIRE OTP Bot Started with Clean Country List!")
+    app.post_init = post_init
+
+    logger.info("🤖 SUPER FIRE OTP Bot Started Successfully!")
     app.run_polling(drop_pending_updates=True)
