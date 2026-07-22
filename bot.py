@@ -26,7 +26,6 @@ main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# Country Map
 COUNTRY_MAP = {
     "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
     "224": {"name": "Guinea", "flag": "🇬🇳"},
@@ -61,8 +60,8 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
         logging.error(f"API call error: {e}")
         return None
 
-# Auto Refresh (Fixed)
-async def auto_refresh_ranges(context):
+# Fixed Auto Refresh using background task
+async def auto_refresh_ranges():
     global dynamic_countries
     while True:
         try:
@@ -210,7 +209,6 @@ async def show_countries(msg):
                 kb.append([InlineKeyboardButton(f"{c['flag']} {c['name']}", callback_data=f"range_any_{r}")])
 
     kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_main")])
-    
     await msg.reply_text("**দেশ সিলেক্ট করুন:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 async def text_handler(update: Update, context):
@@ -232,8 +230,12 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    # Fixed: Using Job Queue for background task
-    app.job_queue.run_repeating(auto_refresh_ranges, interval=60, first=5)
+    # Start background task safely
+    async def start_bot():
+        asyncio.create_task(auto_refresh_ranges())
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        await asyncio.Event().wait()  # Keep running
 
-    logging.info("🤖 SUPER FIRE OTP Bot Started Successfully (Fixed Version)!")
-    app.run_polling()
+    asyncio.run(start_bot())
