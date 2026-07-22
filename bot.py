@@ -186,7 +186,7 @@ async def handle_callback(update: Update, context):
                     reply_markup=InlineKeyboardMarkup(btn),
                     parse_mode=ParseMode.MARKDOWN
                 )
-                active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
+                active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num, service="Facebook"))
                 return
 
         await status_msg.edit_text("❌ Failed to allocate number. Try another country.")
