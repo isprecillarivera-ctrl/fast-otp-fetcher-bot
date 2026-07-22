@@ -13,9 +13,6 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 API_KEY = os.getenv("SMS_API_KEY")
 
-if not TOKEN or not API_KEY:
-    raise ValueError("BOT_TOKEN or SMS_API_KEY missing!")
-
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -25,14 +22,6 @@ main_keyboard = ReplyKeyboardMarkup([
 ], resize_keyboard=True, is_persistent=True)
 
 live_ranges = {}
-
-COUNTRY_MAP = {
-    "sl": "Sierra Leone",
-    "gn": "Guinea",
-    "bj": "Benin",
-    "ci": "Ivory Coast",
-    "mg": "Madagascar",
-}
 
 async def call_api(endpoint, method="POST", payload=None):
     try:
@@ -44,8 +33,7 @@ async def call_api(endpoint, method="POST", payload=None):
             else:
                 r = await client.post(url, json=payload or {}, headers=headers)
             return r.json() if r.status_code == 200 else None
-    except Exception as e:
-        logger.error(f"API Error: {e}")
+    except:
         return None
 
 async def fetch_live_ranges():
@@ -57,28 +45,30 @@ async def fetch_live_ranges():
             services = res.get("services") or res.get("data") or []
             for s in services if isinstance(services, list) else []:
                 sid = str(s.get("sid", "")).lower().strip()
-                if sid and s.get("ranges"):
-                    live_ranges[sid] = s.get("ranges")
-            logger.info(f"Loaded services: {list(live_ranges.keys())}")
+                if sid:
+                    live_ranges[sid] = s.get("ranges", [])
+            logger.info(f"Loaded: {list(live_ranges.keys())}")
         await asyncio.sleep(25)
 
-def get_country_keyboard():
+def get_keyboard():
     buttons = []
     for sid in live_ranges.keys():
-        country_key = sid.split("_")[0] if "_" in sid else sid
-        name = COUNTRY_MAP.get(country_key, sid.upper())
-        flag = "🌍"
-        if country_key == "sl": flag = "🇸🇱"
-        elif country_key == "gn": flag = "🇬🇳"
-        elif country_key == "bj": flag = "🇧🇯"
-        elif country_key == "ci": flag = "🇨🇮"
-        elif country_key == "mg": flag = "🇲🇬"
-        
-        buttons.append([InlineKeyboardButton(f"{flag} {name}", callback_data=f"country_{sid}")])
-    
-    if not buttons:
-        buttons = [[InlineKeyboardButton("🔄 Refresh Ranges", callback_data="refresh")]]
-    return InlineKeyboardMarkup(buttons)
+        # দেশের নাম দেখানোর চেষ্টা
+        name = sid.upper().replace("_", " ")
+        if "sl" in sid or "sierra" in sid:
+            name = "🇸🇱 Sierra Leone"
+        elif "gn" in sid or "guinea" in sid:
+            name = "🇬🇳 Guinea"
+        elif "bj" in sid or "benin" in sid:
+            name = "🇧🇯 Benin"
+        elif "ci" in sid:
+            name = "🇨🇮 Ivory Coast"
+        elif "mg" in sid:
+            name = "🇲🇬 Madagascar"
+        else:
+            name = f"🌍 {name}"
+        buttons.append([InlineKeyboardButton(name, callback_data=f"range_{sid}")])
+    return InlineKeyboardMarkup(buttons) if buttons else InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="refresh")]])
 
 async def start(update: Update, context):
     await update.message.reply_text("✅ স্বাগতম!", reply_markup=main_keyboard)
@@ -86,27 +76,25 @@ async def start(update: Update, context):
 async def handle_callback(update: Update, context):
     query = update.callback_query
     await query.answer()
-
     if query.data == "refresh":
         await fetch_live_ranges()
-        await query.message.edit_text("✅ Ranges Updated!")
+        await query.message.edit_text("✅ Updated!")
         return
-
-    if query.data.startswith("country_"):
-        service_id = query.data.split("_", 1)[1]
-        status = await query.message.edit_text("⚡ Allocating number...")
-        res = await call_api("getnum", "POST", {"range": "1", "service": service_id})
+    if query.data.startswith("range_"):
+        sid = query.data.split("_", 1)[1]
+        status = await query.message.edit_text("⚡ Allocating...")
+        res = await call_api("getnum", "POST", {"range": "1", "service": sid})
         if res and res.get("meta", {}).get("status") == "ok":
             num = res.get("data", {}).get("full_number") or res.get("data", {}).get("number")
             if num:
                 full = re.sub(r'\D', '', str(num))
-                await status.edit_text(f"🚀 **NUMBER ALLOCATED**\n📱 `+{full}`\n⏳ Waiting for OTP...", parse_mode=ParseMode.MARKDOWN)
+                await status.edit_text(f"🚀 **NUMBER ALLOCATED**\n📱 `+{full}`\n⏳ Waiting...", parse_mode=ParseMode.MARKDOWN)
                 return
-        await status.edit_text("❌ Failed. Try again.")
+        await status.edit_text("❌ Failed.")
 
 async def text_handler(update: Update, context):
     if "GET NUMBER" in update.message.text.upper():
-        await update.message.reply_text("👇 দেশ সিলেক্ট করুন:", reply_markup=get_country_keyboard())
+        await update.message.reply_text("👇 দেশ সিলেক্ট করুন:", reply_markup=get_keyboard())
 
 if __name__ == "__main__":
     app = Application.builder().token(TOKEN).build()
