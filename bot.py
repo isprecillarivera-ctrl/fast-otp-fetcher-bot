@@ -28,31 +28,25 @@ OTP_CHANNEL = "@SUPERFIREOTP"
 BOT_USERNAME = "SUPER_FIRE_OTP_BOT"
 
 active_otp_tasks = {}
-live_ranges = {}  # Dynamic ranges from API
 
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# ==================== LIVE RANGES FETCH ====================
-async def fetch_live_ranges():
-    global live_ranges
-    while True:
-        try:
-            res = await call_website_api_async("liveaccess", method="GET")
-            if res and "services" in res:
-                live_ranges = {}
-                for service in res["services"]:
-                    sid = service.get("sid", "").lower()
-                    ranges = service.get("ranges", [])
-                    live_ranges[sid] = ranges
-                logger.info(f"✅ Live ranges updated! Services: {list(live_ranges.keys())}")
-            else:
-                logger.warning("No live ranges received")
-        except Exception as e:
-            logger.error(f"Live range fetch error: {e}")
-        await asyncio.sleep(30)  # প্রতি ৩০ সেকেন্ডে
+ALLOWED_COUNTRIES = {
+    "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
+    "224": {"name": "Guinea", "flag": "🇬🇳"},
+    "225": {"name": "Ivory Coast", "flag": "🇨🇮"},
+    "261": {"name": "Madagascar", "flag": "🇲🇬"},
+    "229": {"name": "Benin", "flag": "🇧🇯"},
+}
+
+def get_country_keyboard():
+    buttons = []
+    for code, data in ALLOWED_COUNTRIES.items():
+        buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
+    return InlineKeyboardMarkup(buttons)
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -72,12 +66,13 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
         logger.error(f"API call error: {e}")
         return None
 
-# ==================== DYNAMIC KEYBOARD ====================
-def get_dynamic_country_keyboard():
-    buttons = []
-    for code, data in ALLOWED_COUNTRIES.items():
-        buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
-    return InlineKeyboardMarkup(buttons)
+async def auto_refresh_ranges():
+    while True:
+        try:
+            await call_website_api_async("liveaccess", method="GET")
+        except Exception as e:
+            logger.error(f"Auto refresh error: {e}")
+        await asyncio.sleep(60)
 
 async def is_user_subscribed(context, user_id):
     try:
