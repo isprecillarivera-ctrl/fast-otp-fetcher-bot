@@ -13,7 +13,7 @@ load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 API_KEY = os.getenv("SMS_API_KEY")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))   # .env এ আপনার টেলিগ্রাম ID দিন
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -27,7 +27,6 @@ main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# Dynamic Countries
 ALLOWED_COUNTRIES = {
     "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
     "224": {"name": "Guinea", "flag": "🇬🇳"},
@@ -48,7 +47,7 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
         headers = {"X-API-Key": API_KEY, "Content-Type": "application/json", "Accept": "application/json"}
         
-        async with httpx.AsyncClient(timeout=8.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             if method == "GET":
                 r = await client.get(url, headers=headers)
             else:
@@ -63,34 +62,28 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
 
 async def auto_refresh_ranges():
     while True:
-        await call_website_api_async("liveaccess", method="GET")
+        try:
+            await call_website_api_async("liveaccess", method="GET")
+        except Exception as e:
+            logging.error(f"Refresh error: {e}")
         await asyncio.sleep(60)
 
 async def add_country(update: Update, context):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ এই কমান্ড শুধুমাত্র অ্যাডমিন ব্যবহার করতে পারবে।")
+        await update.message.reply_text("❌ অ্যাডমিন শুধুমাত্র এই কমান্ড ব্যবহার করতে পারবে।")
         return
 
-    try:
-        args = context.args
-        if len(args) < 3:
-            await update.message.reply_text("ফরম্যাট:\n/addcountry <prefix> <নাম> <ফ্ল্যাগ>\nউদাহরণ: /addcountry 880 Bangladesh 🇧🇩")
-            return
+    args = context.args
+    if len(args) < 3:
+        await update.message.reply_text("ফরম্যাট:\n/addcountry <prefix> <নাম> <ফ্ল্যাগ>\nউদাহরণ: /addcountry 880 Bangladesh 🇧🇩")
+        return
 
-        prefix = args[0].strip()
-        name = " ".join(args[1:-1])
-        flag = args[-1].strip()
+    prefix = args[0].strip()
+    name = " ".join(args[1:-1])
+    flag = args[-1].strip()
 
-        if len(prefix) != 3 or not prefix.isdigit():
-            await update.message.reply_text("❌ Prefix অবশ্যই ৩ ডিজিটের হতে হবে।")
-            return
-
-        dynamic_countries[prefix] = {"name": name, "flag": flag}
-        ALLOWED_COUNTRIES[prefix] = {"name": name, "flag": flag}
-
-        await update.message.reply_text(f"✅ সফলভাবে যোগ হয়েছে!\n\n{flag} {name} ({prefix})")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+    dynamic_countries[prefix] = {"name": name, "flag": flag}
+    await update.message.reply_text(f"✅ যোগ হয়েছে!\n{flag} {name} ({prefix})")
 
 async def is_user_subscribed(context, user_id):
     try:
@@ -102,7 +95,6 @@ async def is_user_subscribed(context, user_id):
 
 async def check_otp(context, chat_id, number):
     full_number = re.sub(r'\D', '', str(number))
-    logging.info(f"🔍 Monitoring OTP for +{full_number}")
     seen_otps = set()
 
     for attempt in range(900):
@@ -235,7 +227,13 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    asyncio.create_task(auto_refresh_ranges())
+    logging.info("🤖 SUPER FIRE OTP Bot Starting...")
 
-    logging.info("🤖 SUPER FIRE OTP Bot Started with Admin Feature!")
-    app.run_polling(drop_pending_updates=True)
+    async def main():
+        asyncio.create_task(auto_refresh_ranges())
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(drop_pending_updates=True)
+        await asyncio.Event().wait()
+
+    asyncio.run(main())
