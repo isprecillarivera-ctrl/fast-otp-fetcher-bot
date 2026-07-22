@@ -26,18 +26,24 @@ main_keyboard = ReplyKeyboardMarkup([
 
 live_ranges = {}
 
+COUNTRY_MAP = {
+    "sl": "Sierra Leone",
+    "gn": "Guinea",
+    "bj": "Benin",
+    "ci": "Ivory Coast",
+    "mg": "Madagascar",
+}
+
 async def call_api(endpoint, method="POST", payload=None):
     try:
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
         headers = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=12) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             if method == "GET":
                 r = await client.get(url, headers=headers)
             else:
                 r = await client.post(url, json=payload or {}, headers=headers)
-            data = r.json() if r.status_code == 200 else None
-            logger.info(f"API {endpoint} Response: {data is not None}")
-            return data
+            return r.json() if r.status_code == 200 else None
     except Exception as e:
         logger.error(f"API Error: {e}")
         return None
@@ -51,23 +57,31 @@ async def fetch_live_ranges():
             services = res.get("services") or res.get("data") or []
             for s in services if isinstance(services, list) else []:
                 sid = str(s.get("sid", "")).lower().strip()
-                if sid:
-                    live_ranges[sid] = s.get("ranges", [])
-            logger.info(f"✅ Loaded {len(live_ranges)} services: {list(live_ranges.keys())}")
-        await asyncio.sleep(20)
+                if sid and s.get("ranges"):
+                    live_ranges[sid] = s.get("ranges")
+            logger.info(f"Loaded services: {list(live_ranges.keys())}")
+        await asyncio.sleep(25)
 
-def get_keyboard():
-    if not live_ranges:
-        return InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh Ranges", callback_data="refresh")]])
-    
+def get_country_keyboard():
     buttons = []
     for sid in live_ranges.keys():
-        name = sid.upper().replace("_", " ")
-        buttons.append([InlineKeyboardButton(name, callback_data=f"range_{sid}")])
+        country_key = sid.split("_")[0] if "_" in sid else sid
+        name = COUNTRY_MAP.get(country_key, sid.upper())
+        flag = "🌍"
+        if country_key == "sl": flag = "🇸🇱"
+        elif country_key == "gn": flag = "🇬🇳"
+        elif country_key == "bj": flag = "🇧🇯"
+        elif country_key == "ci": flag = "🇨🇮"
+        elif country_key == "mg": flag = "🇲🇬"
+        
+        buttons.append([InlineKeyboardButton(f"{flag} {name}", callback_data=f"country_{sid}")])
+    
+    if not buttons:
+        buttons = [[InlineKeyboardButton("🔄 Refresh Ranges", callback_data="refresh")]]
     return InlineKeyboardMarkup(buttons)
 
 async def start(update: Update, context):
-    await update.message.reply_text("✅ বট চালু আছে। GET NUMBER চাপুন।", reply_markup=main_keyboard)
+    await update.message.reply_text("✅ স্বাগতম!", reply_markup=main_keyboard)
 
 async def handle_callback(update: Update, context):
     query = update.callback_query
@@ -75,12 +89,12 @@ async def handle_callback(update: Update, context):
 
     if query.data == "refresh":
         await fetch_live_ranges()
-        await query.message.edit_text("✅ Ranges Updated! আবার GET NUMBER চাপুন।")
+        await query.message.edit_text("✅ Ranges Updated!")
         return
 
-    if query.data.startswith("range_"):
+    if query.data.startswith("country_"):
         service_id = query.data.split("_", 1)[1]
-        status = await query.message.edit_text("⚡ Allocating...")
+        status = await query.message.edit_text("⚡ Allocating number...")
         res = await call_api("getnum", "POST", {"range": "1", "service": service_id})
         if res and res.get("meta", {}).get("status") == "ok":
             num = res.get("data", {}).get("full_number") or res.get("data", {}).get("number")
@@ -92,7 +106,7 @@ async def handle_callback(update: Update, context):
 
 async def text_handler(update: Update, context):
     if "GET NUMBER" in update.message.text.upper():
-        await update.message.reply_text("👇 Select Range:", reply_markup=get_keyboard())
+        await update.message.reply_text("👇 দেশ সিলেক্ট করুন:", reply_markup=get_country_keyboard())
 
 if __name__ == "__main__":
     app = Application.builder().token(TOKEN).build()
@@ -102,7 +116,7 @@ if __name__ == "__main__":
 
     async def post_init(application):
         application.create_task(fetch_live_ranges())
-        logger.info("Bot Started Successfully!")
+        logger.info("Bot Started")
 
     app.post_init = post_init
     app.run_polling(drop_pending_updates=True)
