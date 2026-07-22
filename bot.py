@@ -61,12 +61,10 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
         logging.error(f"API call error: {e}")
         return None
 
-# Auto Refresh Every 60 Seconds
-async def auto_refresh_ranges():
+# Auto Refresh (Fixed)
+async def auto_refresh_ranges(context):
     global dynamic_countries
-    count = 0
     while True:
-        count += 1
         try:
             res = await call_website_api_async("liveaccess", method="GET")
             if res and "services" in res:
@@ -192,10 +190,9 @@ async def handle_callback(update: Update, context):
 
     elif query.data == "back_to_main":
         await query.message.delete()
-        await update.message.reply_text("মূল মেনু:", reply_markup=main_keyboard)  # Fixed
+        await update.message.reply_text("মূল মেনু:", reply_markup=main_keyboard)
 
 async def show_countries(msg):
-    """Directly show all available countries"""
     res = await call_website_api_async("liveaccess", method="GET")
     if not res:
         await msg.reply_text("❌ Failed to fetch countries.")
@@ -214,10 +211,7 @@ async def show_countries(msg):
 
     kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_main")])
     
-    if kb:
-        await msg.reply_text("**দেশ সিলেক্ট করুন:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
-    else:
-        await msg.reply_text("কোনো দেশ পাওয়া যায়নি।")
+    await msg.reply_text("**দেশ সিলেক্ট করুন:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 async def text_handler(update: Update, context):
     if not await is_user_subscribed(context, update.effective_user.id):
@@ -225,7 +219,7 @@ async def text_handler(update: Update, context):
 
     text = update.message.text
     if "GET NUMBER" in text:
-        await show_countries(update.message)   # ← নতুন ফ্লো
+        await show_countries(update.message)
     elif "2FA" in text:
         await update.message.reply_text("Maintenance Mode.")
     elif "LIVE OTP" in text:
@@ -238,7 +232,8 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    asyncio.create_task(auto_refresh_ranges())
+    # Fixed: Using Job Queue for background task
+    app.job_queue.run_repeating(auto_refresh_ranges, interval=60, first=5)
 
-    logging.info("🤖 SUPER FIRE OTP Bot Started with Direct Country Selection!")
+    logging.info("🤖 SUPER FIRE OTP Bot Started Successfully (Fixed Version)!")
     app.run_polling()
