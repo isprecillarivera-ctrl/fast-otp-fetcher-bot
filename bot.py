@@ -48,11 +48,6 @@ def get_country_keyboard():
         buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
     return InlineKeyboardMarkup(buttons)
 
-def get_country_info(number):
-    full = re.sub(r'\D', '', str(number))
-    prefix = full[:3]
-    return ALLOWED_COUNTRIES.get(prefix, {"flag": "🌍", "name": "International"})
-
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
@@ -103,14 +98,16 @@ async def check_otp(context, chat_id, number):
                         otp = item.get("otp") or item.get("code") or item.get("sms")
                         if otp and otp not in seen_otps:
                             seen_otps.add(otp)
-                            country = get_country_info(full_number)
+                            country = ALLOWED_COUNTRIES.get(full_number[:3])
+                            c_flag = country["flag"] if country else "🌍"
+                            c_name = country["name"] if country else "International"
                             visible = full_number[:6] if len(full_number) > 6 else full_number
                             hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
 
                             public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
 🔥 **NEW OTP RECEIVED** 🔥
-{country['flag']} **{country['name']}**
+{c_flag} **{c_name}**
 📱 **Number:** `{hidden_number}`
 🔑 **OTP Code:** `{otp}`
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
@@ -174,7 +171,9 @@ async def handle_callback(update: Update, context):
             num = data.get("full_number") or data.get("number") or data.get("national_number")
            
             if num:
-                country = get_country_info(num)
+                country = ALLOWED_COUNTRIES.get(str(num)[:3])
+                if not country:
+                    country = {"flag": "🌍", "name": "International"}
                 btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1] if len(parts)>1 else '1'}_{range_value}")]]
                 await status_msg.edit_text(
                     f"🚀 **NUMBER ALLOCATED**\n\n"
