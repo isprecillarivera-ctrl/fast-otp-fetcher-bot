@@ -27,12 +27,15 @@ main_keyboard = ReplyKeyboardMarkup([
 live_ranges = {}
 
 # শুধু আপনার দেশগুলো
-ALLOWED_COUNTRIES = {
-    "Sierra Leone": "sl",
-    "Guinea": "gn",
-    "Benin": "bj",
-    "Ivory Coast": "ci",
-    "Madagascar": "mg",
+ALLOWED = {
+    "sierra leone": "Sierra Leone",
+    "guinea": "Guinea",
+    "benin": "Benin",
+    "ivory coast": "Ivory Coast",
+    "madagascar": "Madagascar",
+    "sl": "Sierra Leone",
+    "gn": "Guinea",
+    "bj": "Benin",
 }
 
 async def call_api(endpoint, method="POST", payload=None):
@@ -57,29 +60,29 @@ async def fetch_live_ranges():
             live_ranges = {}
             services = res.get("services") or res.get("data") or []
             for s in services if isinstance(services, list) else []:
-                sid = str(s.get("sid", "")).strip()
+                sid = str(s.get("sid", "")).strip().lower()
                 if sid and s.get("ranges"):
-                    live_ranges[sid] = s.get("ranges")
-            logger.info(f"Loaded services: {list(live_ranges.keys())}")
+                    # শুধু অনুমোদিত দেশ চেক
+                    if any(key in sid for key in ALLOWED.keys()):
+                        live_ranges[sid] = s.get("ranges")
+            logger.info(f"Loaded allowed countries: {list(live_ranges.keys())}")
         await asyncio.sleep(25)
 
 def get_country_keyboard():
     buttons = []
-    for country_name, code in ALLOWED_COUNTRIES.items():
-        # যদি live_ranges-এ থাকে তাহলে দেখাবে
-        for sid in live_ranges.keys():
-            if code.lower() in sid.lower() or country_name.lower() in sid.lower():
-                buttons.append([InlineKeyboardButton(f"🇸🇱 {country_name}", callback_data=f"service_{sid}")])
+    for sid in live_ranges.keys():
+        display = sid.upper()
+        for key, name in ALLOWED.items():
+            if key in sid.lower():
+                display = name
                 break
-        else:
-            # যদি না থাকে তাহলে স্কিপ
-            continue
+        buttons.append([InlineKeyboardButton(f"🌍 {display}", callback_data=f"service_{sid}")])
     if not buttons:
         buttons = [[InlineKeyboardButton("🔄 Refresh Ranges", callback_data="refresh")]]
     return InlineKeyboardMarkup(buttons)
 
 async def start(update: Update, context):
-    await update.message.reply_text("✅ স্বাগতম! GET NUMBER চাপুন।", reply_markup=main_keyboard)
+    await update.message.reply_text("✅ স্বাগতম! দেশ সিলেক্ট করুন।", reply_markup=main_keyboard)
 
 async def handle_callback(update: Update, context):
     query = update.callback_query
