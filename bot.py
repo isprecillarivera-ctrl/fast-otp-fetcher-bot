@@ -94,7 +94,8 @@ async def check_otp(context, chat_id, number):
                         if otp and otp not in seen_otps:
                             seen_otps.add(otp)
                             visible = full_number[:6] if len(full_number) > 6 else full_number
-                            hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
+                            stars = '*' * (len(full_number) - len(visible))
+                            hidden_number = f"+{visible}{stars}"
                             country = ALLOWED_COUNTRIES.get(full_number[:3])
                             public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
