@@ -15,9 +15,12 @@ TOKEN = os.getenv("BOT_TOKEN")
 API_KEY = os.getenv("SMS_API_KEY")
 
 if not TOKEN or not API_KEY:
-    raise ValueError("BOT_TOKEN or SMS_API_KEY missing!")
+    raise ValueError("BOT_TOKEN or SMS_API_KEY missing in .env file!")
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 UPDATE_CHANNEL = "@SUPERFIREUPDATE"
@@ -27,7 +30,7 @@ BOT_USERNAME = "SUPER_FIRE_OTP_BOT"
 active_otp_tasks = {}
 live_ranges = {}
 
-# শুধু আপনার পছন্দের দেশগুলো
+# আপনার পছন্দের দেশসমূহ
 COUNTRY_INFO = {
     "sl": {"flag": "🇸🇱", "name": "Sierra Leone"},
     "gn": {"flag": "🇬🇳", "name": "Guinea"},
@@ -41,7 +44,7 @@ main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# ==================== API ====================
+# ==================== API কল ====================
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
         url = f"https://2eee7.com/@Access/@Bot/2eee7/@public/api/{endpoint}"
@@ -52,42 +55,51 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 r = await client.get(url, headers=headers)
             else:
                 r = await client.post(url, json=payload or {}, headers=headers)
-            return r.json() if r.status_code == 200 else None
+            
+            if r.status_code == 200:
+                return r.json()
+            logger.error(f"API Error {endpoint}: {r.status_code}")
+            return None
     except Exception as e:
-        logger.error(f"API Error: {e}")
+        logger.error(f"API Exception ({endpoint}): {e}")
         return None
 
-# ==================== লাইভ রেঞ্জ ====================
+# ==================== লাইভ রেঞ্জ ফেচ ====================
 async def fetch_live_ranges():
     global live_ranges
     while True:
-        res = await call_website_api_async("liveaccess", method="GET")
-        if res:
-            live_ranges = {}
-            services = res.get("services") or res.get("data") or []
-            for s in services if isinstance(services, list) else []:
-                sid = str(s.get("sid", "")).lower().strip()
-                ranges = s.get("ranges", [])
-                if sid and ranges:
-                    live_ranges[sid] = ranges
-            logger.info(f"Loaded {len(live_ranges)} live ranges")
+        try:
+            res = await call_website_api_async("liveaccess", method="GET")
+            if res:
+                live_ranges = {}
+                services = res.get("services") or res.get("data") or []
+                for service in services if isinstance(services, list) else []:
+                    sid = str(service.get("sid", "")).lower().strip()
+                    ranges = service.get("ranges", [])
+                    if sid and ranges:
+                        live_ranges[sid] = ranges
+                logger.info(f"✅ Live ranges loaded: {len(live_ranges)} services")
+            else:
+                logger.warning("liveaccess API returned empty")
+        except Exception as e:
+            logger.error(f"fetch_live_ranges error: {e}")
         await asyncio.sleep(25)
 
-# ==================== দেশ ভিত্তিক কীবোর্ড (শুধু যে দেশের রেঞ্জ আছে) ====================
+# ==================== দেশ কীবোর্ড ====================
 def get_country_keyboard():
     buttons = []
     for sid, ranges in live_ranges.items():
-        # দেশের কোড বের করা
+        if not ranges:
+            continue
         country_key = sid.split("_")[0] if "_" in sid else sid[:2]
-        if country_key in COUNTRY_INFO and ranges:  # শুধুমাত্র যাদের রেঞ্জ আছে
+        if country_key in COUNTRY_INFO:
             info = COUNTRY_INFO[country_key]
-            # প্রতি দেশের জন্য প্রথম রেঞ্জ
             buttons.append([InlineKeyboardButton(
                 f"{info['flag']} {info['name']}", 
                 callback_data=f"country_{country_key}_{sid}"
             )])
     if not buttons:
-        buttons.append([InlineKeyboardButton("🔄 Refresh Ranges", callback_data="refresh_ranges")])
+        return InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh Ranges", callback_data="refresh_ranges")]])
     return InlineKeyboardMarkup(buttons)
 
 # ==================== হ্যান্ডলার ====================
@@ -99,7 +111,7 @@ async def handle_callback(update: Update, context):
     await query.answer()
 
     if query.data == "refresh_ranges":
-        await query.message.edit_text("🔄 Updating ranges...")
+        await query.message.edit_text("🔄 Ranges আপডেট হচ্ছে...")
         await fetch_live_ranges()
         await query.message.edit_text("✅ Updated! আবার GET NUMBER চাপুন।")
         return
@@ -133,7 +145,7 @@ async def handle_callback(update: Update, context):
                 )
                 return
 
-        await status_msg.edit_text("❌ Failed. Try again or refresh ranges.")
+        await status_msg.edit_text("❌ Failed to allocate number. Try again.")
 
 async def text_handler(update: Update, context):
     text = update.message.text.upper()
@@ -157,7 +169,7 @@ if __name__ == "__main__":
 
     async def post_init(application):
         application.create_task(fetch_live_ranges())
-        logger.info("🤖 SUPER FIRE OTP Bot Started!")
+        logger.info("🤖 SUPER FIRE OTP Bot Started Successfully!")
 
     app.post_init = post_init
     app.run_polling(drop_pending_updates=True)
