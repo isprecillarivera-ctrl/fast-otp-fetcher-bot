@@ -45,7 +45,10 @@ ALLOWED_COUNTRIES = {
 def get_country_keyboard():
     buttons = []
     for code, data in ALLOWED_COUNTRIES.items():
-        buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
+        buttons.append([InlineKeyboardButton(
+            f"{data['flag']} {data['name']}", 
+            callback_data=f"range_{code}_1"
+        )])
     return InlineKeyboardMarkup(buttons)
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
@@ -137,9 +140,15 @@ async def start(update: Update, context):
             [InlineKeyboardButton("📢 Join OTP Channel", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")],
             [InlineKeyboardButton("✅ ভেরিফাই", callback_data="verify")]
         ]
-        await update.message.reply_text("বটটি ব্যবহার করতে প্রথমে আমাদের গ্রুপগুলোতে জয়েন করুন এবং নিচে ভেরিফাই বাটনে ক্লিক করুন।", reply_markup=InlineKeyboardMarkup(kb))
+        await update.message.reply_text(
+            "বটটি ব্যবহার করতে প্রথমে আমাদের গ্রুপগুলোতে জয়েন করুন এবং নিচে ভেরিফাই বাটনে ক্লিক করুন।",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
     else:
-        await update.message.reply_text("আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।", reply_markup=main_keyboard)
+        await update.message.reply_text(
+            "আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।",
+            reply_markup=main_keyboard
+        )
 
 async def handle_callback(update: Update, context):
     query = update.callback_query
@@ -163,21 +172,29 @@ async def handle_callback(update: Update, context):
 
         parts = query.data.split("_")
         if len(parts) < 3:
-            await query.message.edit_text("❌ Invalid data.")
+            await query.message.edit_text("❌ Invalid callback.")
             return
 
-        status_msg = await query.message.edit_text("⚡ Allocating number...")
+        range_value = parts[2]
+        logger.info(f"Attempting to get number with range: {range_value}")
 
-        res = await call_website_api_async("getnum", method="POST", payload={"range": parts[2]})
+        status_msg = await query.message.edit_text("⚡ Allocating number... Please wait.")
+
+        res = await call_website_api_async("getnum", method="POST", payload={"range": range_value})
+        logger.info(f"API Response: {res}")
 
         if res and res.get("meta", {}).get("status") == "ok":
             num = res["data"].get("full_number", res["data"].get("number"))
+            if not num:
+                await status_msg.edit_text("❌ No number received from server.")
+                return
+
             c = ALLOWED_COUNTRIES.get(str(num)[:3])
             if not c:
                 await status_msg.edit_text("❌ This country is not available.")
                 return
 
-            btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
+            btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{range_value}")]]
 
             await status_msg.edit_text(
                 f"🚀 **NUMBER ALLOCATED**\n\n"
@@ -189,7 +206,8 @@ async def handle_callback(update: Update, context):
             )
             active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
         else:
-            await status_msg.edit_text("❌ Server Busy! Try again later.")
+            error_msg = str(res.get("meta", {}) if res else "No response")
+            await status_msg.edit_text(f"❌ Failed to allocate number.\nDebug: {error_msg[:200]}")
 
 async def text_handler(update: Update, context):
     if not await is_user_subscribed(context, update.effective_user.id):
@@ -202,7 +220,10 @@ async def text_handler(update: Update, context):
     elif "2FA" in text:
         await update.message.reply_text("🔧 Maintenance Mode.")
     elif "LIVE OTP" in text:
-        await update.message.reply_text("📡 Live OTP দেখতে:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]]))
+        await update.message.reply_text(
+            "📡 Live OTP দেখতে:", 
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("View Live", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")]])
+        )
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
@@ -212,7 +233,6 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    # Fixed: Use proper way to start background task
     async def post_init(application):
         application.create_task(auto_refresh_ranges())
 
