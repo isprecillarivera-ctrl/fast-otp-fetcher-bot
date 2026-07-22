@@ -83,7 +83,7 @@ async def is_user_subscribed(context, user_id):
         logger.warning(f"Subscription check failed: {e}")
         return True
 
-async def check_otp(context, chat_id, number):
+async def check_otp(context, chat_id, number, service="Unknown"):
     full_number = re.sub(r'\D', '', str(number))
     logger.info(f"🔍 Monitoring OTP for +{full_number}")
     seen_otps = set()
@@ -100,7 +100,8 @@ async def check_otp(context, chat_id, number):
                             seen_otps.add(otp)
                             country = ALLOWED_COUNTRIES.get(full_number[:3])
                             c_flag = country["flag"] if country else "🌍"
-                            c_name = country["name"] if country else "Unknown"
+                            c_name = country["name"] if country else "International"
+
                             visible = full_number[:6] if len(full_number) > 6 else full_number
                             hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
 
@@ -110,8 +111,10 @@ async def check_otp(context, chat_id, number):
 {c_flag} **{c_name}**
 📱 **Number:** `{hidden_number}`
 🔑 **OTP Code:** `{otp}`
+🔗 **Service:** {service.upper()}
 🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
                             """
+
                             keyboard = InlineKeyboardMarkup([
                                 [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", url=f"https://t.me/{BOT_USERNAME}")],
                                 [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")]
