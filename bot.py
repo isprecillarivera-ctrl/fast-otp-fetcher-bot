@@ -26,15 +26,13 @@ main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# ✅ শুধুমাত্র এই দেশগুলো দেখাবে
+# শুধুমাত্র এই দেশগুলো দেখাবে
 ALLOWED_COUNTRIES = {
     "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
     "224": {"name": "Guinea", "flag": "🇬🇳"},
     "225": {"name": "Ivory Coast", "flag": "🇨🇮"},
     "261": {"name": "Madagascar", "flag": "🇲🇬"},
     "229": {"name": "Benin", "flag": "🇧🇯"},
-    # এখানে আরও দেশ যোগ করতে চাইলে নিচে লিখুন
-    # "880": {"name": "Bangladesh", "flag": "🇧🇩"},
 }
 
 dynamic_countries = ALLOWED_COUNTRIES.copy()
@@ -42,7 +40,7 @@ dynamic_countries = ALLOWED_COUNTRIES.copy()
 def get_country_details(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
     prefix = clean_num[:3]
-    return dynamic_countries.get(prefix, None)  # None if not allowed
+    return dynamic_countries.get(prefix)
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -56,14 +54,13 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 r = await client.post(url, json=payload or {}, headers=headers)
             
             if r.status_code != 200:
-                logging.warning(f"API {endpoint} failed: {r.status_code}")
                 return None
             return r.json()
     except Exception as e:
         logging.error(f"API call error: {e}")
         return None
 
-# Auto Refresh
+# Background Refresh Task
 async def auto_refresh_ranges():
     global dynamic_countries
     while True:
@@ -84,7 +81,6 @@ async def is_user_subscribed(context, user_id):
         return False
 
 async def check_otp(context, chat_id, number):
-    # ... (আগের কোডের মতো রাখা হয়েছে - সংক্ষেপে)
     full_number = re.sub(r'\D', '', str(number))
     logging.info(f"🔍 Monitoring OTP for +{full_number}")
     seen_otps = set()
@@ -130,8 +126,6 @@ async def check_otp(context, chat_id, number):
     await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`")
 
 async def start(update: Update, context):
-    # ... (আগের মতো)
-
     user_id = update.effective_user.id
     if not await is_user_subscribed(context, user_id):
         kb = [
@@ -144,8 +138,6 @@ async def start(update: Update, context):
         await update.message.reply_text("আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।", reply_markup=main_keyboard)
 
 async def handle_callback(update: Update, context):
-    # ... (আগের মতো রাখা হয়েছে)
-
     query = update.callback_query
     await query.answer()
 
@@ -222,7 +214,14 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    asyncio.create_task(auto_refresh_ranges())
+    logging.info("🤖 SUPER FIRE OTP Bot Starting...")
 
-    logging.info("🤖 SUPER FIRE OTP Bot Started with Clean Country List!")
-    app.run_polling()
+    # Safe way to run background task
+    async def main():
+        asyncio.create_task(auto_refresh_ranges())
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(drop_pending_updates=True)
+        await asyncio.Event().wait()
+
+    asyncio.run(main())
