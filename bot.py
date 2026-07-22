@@ -28,14 +28,14 @@ OTP_CHANNEL = "@SUPERFIREOTP"
 BOT_USERNAME = "SUPER_FIRE_OTP_BOT"
 
 active_otp_tasks = {}
-live_ranges = {}  # Dynamic ranges from API
+live_ranges = {}  # Dynamic ranges from your website
 
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔥 GET NUMBER 🔥")],
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-# ==================== LIVE RANGES FETCH ====================
+# ==================== LIVE RANGES ====================
 async def fetch_live_ranges():
     global live_ranges
     while True:
@@ -72,9 +72,10 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
         logger.error(f"API call error: {e}")
         return None
 
-# ==================== DYNAMIC COUNTRY KEYBOARD ====================
+# ==================== DYNAMIC KEYBOARD ====================
 def get_dynamic_keyboard():
     buttons = []
+    # For simplicity, show available countries from ALLOWED_COUNTRIES
     for code, data in ALLOWED_COUNTRIES.items():
         buttons.append([InlineKeyboardButton(f"{data['flag']} {data['name']}", callback_data=f"range_{code}_1")])
     return InlineKeyboardMarkup(buttons)
