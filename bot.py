@@ -53,6 +53,7 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
                 r = await client.post(url, json=payload or {}, headers=headers)
             
             if r.status_code != 200:
+                logging.warning(f"API {endpoint} failed: {r.status_code}")
                 return None
             return r.json()
     except Exception as e:
@@ -61,16 +62,126 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
 
 async def auto_refresh_ranges():
     while True:
-        await call_website_api_async("liveaccess", method="GET")
+        try:
+            await call_website_api_async("liveaccess", method="GET")
+        except Exception as e:
+            logging.error(f"Auto refresh error: {e}")
         await asyncio.sleep(60)
 
+async def is_user_subscribed(context, user_id):
+    try:
+        m1 = await context.bot.get_chat_member(chat_id=UPDATE_CHANNEL, user_id=user_id)
+        m2 = await context.bot.get_chat_member(chat_id=OTP_CHANNEL, user_id=user_id)
+        return m1.status not in ['left', 'kicked'] and m2.status not in ['left', 'kicked']
+    except:
+        return False
+
+async def check_otp(context, chat_id, number):
+    full_number = re.sub(r'\D', '', str(number))
+    logging.info(f"🔍 Monitoring OTP for +{full_number}")
+    seen_otps = set()
+
+    for attempt in range(900):
+        await asyncio.sleep(2)
+        try:
+            res = await call_website_api_async("success-otp-info", method="GET")
+            if res and "data" in res and "otps" in res.get("data", {}):
+                for item in res["data"]["otps"]:
+                    item_num = re.sub(r'\D', '', str(item.get("number", "")))
+                    if item_num == full_number or item_num.endswith(full_number[-8:]):
+                        otp = item.get("otp") or item.get("code") or item.get("sms")
+                        if otp and otp not in seen_otps:
+                            seen_otps.add(otp)
+                            visible = full_number[:6] if len(full_number) > 6 else full_number
+                            hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
+                            country = get_country_details(number)
+                            if not country:
+                                continue
+
+                            public_text = f"""
+🌟 **SUPER FIRE OTP** 🌟
+🔥 **NEW OTP RECEIVED** 🔥
+{country['flag']} **{country['name']}**
+📱 **Number:** `{hidden_number}`
+🔑 **OTP Code:** `{otp}`
+⏱ **Time Taken:** {attempt*2} seconds
+🕒 **Time:** {datetime.now().strftime('%I:%M:%S %p')}
+                            """
+
+                            keyboard = InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔄 OTP বটে নিয়ে আসুন", url=f"https://t.me/{BOT_USERNAME}")],
+                                [InlineKeyboardButton("📢 আপডেট গ্রুপে যান", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")]
+                            ])
+
+                            await context.bot.send_message(chat_id=OTP_CHANNEL, text=public_text.strip(), parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+                            await context.bot.send_message(chat_id=chat_id, text=f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n📱 `+{number}`\n🔑 `{otp}`", parse_mode=ParseMode.MARKDOWN)
+                            return
+        except Exception as e:
+            logging.error(f"OTP check error: {e}")
+
+    await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`")
+
 async def start(update: Update, context):
-    await update.message.reply_text("বট চালু আছে।\nGET NUMBER চাপুন।", reply_markup=main_keyboard)
+    user_id = update.effective_user.id
+    if not await is_user_subscribed(context, user_id):
+        kb = [
+            [InlineKeyboardButton("📢 Join Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.replace('@', '')}")],
+            [InlineKeyboardButton("📢 Join OTP Channel", url=f"https://t.me/{OTP_CHANNEL.replace('@', '')}")],
+            [InlineKeyboardButton("✅ ভেরিফাই", callback_data="verify")]
+        ]
+        await update.message.reply_text("বটটি ব্যবহার করতে প্রথমে আমাদের গ্রুপগুলোতে জয়েন করুন এবং নিচে ভেরিফাই বাটনে ক্লিক করুন।", reply_markup=InlineKeyboardMarkup(kb))
+    else:
+        await update.message.reply_text("আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।", reply_markup=main_keyboard)
 
 async def handle_callback(update: Update, context):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("Feature under development.")
+
+    if query.data == "verify":
+        if await is_user_subscribed(context, query.from_user.id):
+            await query.message.delete()
+            await context.bot.send_message(chat_id=query.message.chat_id, text="স্বাগতম! আপনি এখন সকল সুবিধা ব্যবহার করতে পারবেন।", reply_markup=main_keyboard)
+        else:
+            await query.answer("আপনি এখনও জয়েন করেননি!", show_alert=True)
+
+    elif query.data.startswith("range_") or query.data.startswith("chgnum_"):
+        chat_id = query.message.chat_id
+        if chat_id in active_otp_tasks:
+            task = active_otp_tasks[chat_id]
+            if not task.done():
+                task.cancel()
+            active_otp_tasks.pop(chat_id, None)
+
+        parts = query.data.split("_")
+        status_msg = await query.message.edit_text("⚡ _Allocating number..._")
+
+        res = await call_website_api_async("getnum", method="POST", payload={"range": parts[2]})
+        
+        if res and res.get("meta", {}).get("status") == "ok":
+            num = res["data"].get("full_number", res["data"].get("number"))
+            c = get_country_details(num)
+            if not c:
+                await status_msg.edit_text("❌ This country is not available.")
+                return
+
+            btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
+            
+            await status_msg.edit_text(
+                f"🚀 **NUMBER ALLOCATED**\n\n"
+                f"📍 COUNTRY: {c['flag']} {c['name']}\n"
+                f"📱 PHONE: `+{re.sub(r'\D', '', str(num))}`\n"
+                f"⏳ STATUS: Waiting for OTP...",
+                reply_markup=InlineKeyboardMarkup(btn),
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            active_otp_tasks[chat_id] = asyncio.create_task(check_otp(context, chat_id, num))
+        else:
+            await status_msg.edit_text("❌ Server Busy! Try again later.")
+
+    elif query.data == "back_to_main":
+        await query.message.delete()
+        await update.message.reply_text("মূল মেনু:", reply_markup=main_keyboard)
 
 async def show_countries(msg):
     kb = []
@@ -80,6 +191,9 @@ async def show_countries(msg):
     await msg.reply_text("**দেশ সিলেক্ট করুন:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
 
 async def text_handler(update: Update, context):
+    if not await is_user_subscribed(context, update.effective_user.id):
+        return await start(update, context)
+
     text = update.message.text
     if "GET NUMBER" in text:
         await show_countries(update.message)
@@ -97,5 +211,5 @@ if __name__ == "__main__":
 
     asyncio.create_task(auto_refresh_ranges())
 
-    logging.info("🤖 SUPER FIRE OTP Bot Started!")
+    logging.info("🤖 SUPER FIRE OTP Bot Started with Clean Country List!")
     app.run_polling(drop_pending_updates=True)
