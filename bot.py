@@ -236,4 +236,4 @@ if __name__ == "__main__":
         await app.updater.start_polling(drop_pending_updates=True)
         await asyncio.Event().wait()
 
-    asyncio.run(main())pip install -r requirements.txt --upgrade
+    asyncio.run(main())
