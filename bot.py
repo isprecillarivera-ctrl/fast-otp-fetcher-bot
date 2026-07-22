@@ -26,20 +26,23 @@ main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🔐 2FA CODE"), KeyboardButton("📡 LIVE OTP SECTION")]
 ], resize_keyboard=True, is_persistent=True)
 
-COUNTRY_MAP = {
+# ✅ শুধুমাত্র এই দেশগুলো দেখাবে
+ALLOWED_COUNTRIES = {
     "232": {"name": "Sierra Leone", "flag": "🇸🇱"},
     "224": {"name": "Guinea", "flag": "🇬🇳"},
     "225": {"name": "Ivory Coast", "flag": "🇨🇮"},
     "261": {"name": "Madagascar", "flag": "🇲🇬"},
     "229": {"name": "Benin", "flag": "🇧🇯"},
+    # এখানে আরও দেশ যোগ করতে চাইলে নিচে লিখুন
+    # "880": {"name": "Bangladesh", "flag": "🇧🇩"},
 }
 
-dynamic_countries = COUNTRY_MAP.copy()
+dynamic_countries = ALLOWED_COUNTRIES.copy()
 
 def get_country_details(number_str):
     clean_num = re.sub(r'\D', '', str(number_str))
     prefix = clean_num[:3]
-    return dynamic_countries.get(prefix, {"name": "Premium Server", "flag": "🌍"})
+    return dynamic_countries.get(prefix, None)  # None if not allowed
 
 async def call_website_api_async(endpoint, method="POST", payload=None):
     try:
@@ -60,26 +63,16 @@ async def call_website_api_async(endpoint, method="POST", payload=None):
         logging.error(f"API call error: {e}")
         return None
 
-# Fixed Auto Refresh using background task
+# Auto Refresh
 async def auto_refresh_ranges():
     global dynamic_countries
     while True:
         try:
             res = await call_website_api_async("liveaccess", method="GET")
-            if res and "services" in res:
-                updated = False
-                for s in res.get("services", []):
-                    for r in s.get("ranges", []):
-                        p = re.sub(r'\D', '', str(r))[:3]
-                        if p not in dynamic_countries and len(p) == 3:
-                            dynamic_countries[p] = {"name": f"Country {p}", "flag": "🌍"}
-                            updated = True
-                            logging.info(f"🆕 New range detected: {p}")
-                if updated:
-                    logging.info(f"✅ Dynamic countries updated | Total: {len(dynamic_countries)}")
+            if res:
+                logging.info("🔄 Range check completed")
         except Exception as e:
             logging.error(f"Auto refresh error: {e}")
-        
         await asyncio.sleep(60)
 
 async def is_user_subscribed(context, user_id):
@@ -91,6 +84,7 @@ async def is_user_subscribed(context, user_id):
         return False
 
 async def check_otp(context, chat_id, number):
+    # ... (আগের কোডের মতো রাখা হয়েছে - সংক্ষেপে)
     full_number = re.sub(r'\D', '', str(number))
     logging.info(f"🔍 Monitoring OTP for +{full_number}")
     seen_otps = set()
@@ -109,6 +103,8 @@ async def check_otp(context, chat_id, number):
                             visible = full_number[:6] if len(full_number) > 6 else full_number
                             hidden_number = f"+{visible}{'*' * (len(full_number) - len(visible))}"
                             country = get_country_details(number)
+                            if not country:
+                                continue
 
                             public_text = f"""
 🌟 **SUPER FIRE OTP** 🌟
@@ -134,6 +130,8 @@ async def check_otp(context, chat_id, number):
     await context.bot.send_message(chat_id=chat_id, text=f"❌ **TIMEOUT!** No OTP received for `+{number}`")
 
 async def start(update: Update, context):
+    # ... (আগের মতো)
+
     user_id = update.effective_user.id
     if not await is_user_subscribed(context, user_id):
         kb = [
@@ -146,6 +144,8 @@ async def start(update: Update, context):
         await update.message.reply_text("আপনি ভেরিফাইড ইউজার। নিচে থেকে সার্ভিস সিলেক্ট করুন।", reply_markup=main_keyboard)
 
 async def handle_callback(update: Update, context):
+    # ... (আগের মতো রাখা হয়েছে)
+
     query = update.callback_query
     await query.answer()
 
@@ -172,6 +172,10 @@ async def handle_callback(update: Update, context):
         if res and res.get("meta", {}).get("status") == "ok":
             num = res["data"].get("full_number", res["data"].get("number"))
             c = get_country_details(num)
+            if not c:
+                await status_msg.edit_text("❌ This country is not available.")
+                return
+
             btn = [[InlineKeyboardButton("🔄 Change Number", callback_data=f"chgnum_{parts[1]}_{parts[2]}")]]
             
             await status_msg.edit_text(
@@ -192,21 +196,9 @@ async def handle_callback(update: Update, context):
         await update.message.reply_text("মূল মেনু:", reply_markup=main_keyboard)
 
 async def show_countries(msg):
-    res = await call_website_api_async("liveaccess", method="GET")
-    if not res:
-        await msg.reply_text("❌ Failed to fetch countries.")
-        return
-
     kb = []
-    seen = set()
-
-    for s in res.get("services", []):
-        for r in s.get("ranges", []):
-            p = re.sub(r'\D', '', str(r))[:3]
-            if p in dynamic_countries and p not in seen:
-                seen.add(p)
-                c = dynamic_countries[p]
-                kb.append([InlineKeyboardButton(f"{c['flag']} {c['name']}", callback_data=f"range_any_{r}")])
+    for prefix, country in ALLOWED_COUNTRIES.items():
+        kb.append([InlineKeyboardButton(f"{country['flag']} {country['name']}", callback_data=f"range_any_{prefix}")])
 
     kb.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_main")])
     await msg.reply_text("**দেশ সিলেক্ট করুন:**", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN)
@@ -230,12 +222,7 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    # Start background task safely
-    async def start_bot():
-        asyncio.create_task(auto_refresh_ranges())
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling()
-        await asyncio.Event().wait()  # Keep running
+    asyncio.create_task(auto_refresh_ranges())
 
-    asyncio.run(start_bot())
+    logging.info("🤖 SUPER FIRE OTP Bot Started with Clean Country List!")
+    app.run_polling()
